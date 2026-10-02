@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.jsx';
+---
+<Layout title="CART">
+  <Nav client:load activa="carrito" />
+  <section class="lista">
+    <p style="color:#bbb; text-align:center; padding:60px 0; font-size:12px; letter-spacing:1px;">CART IS EMPTY</p>
+  </section>
+</Layout>

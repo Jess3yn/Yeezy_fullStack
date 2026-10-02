@@ -1,0 +1,41 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.jsx';
+---
+<Layout title="REGISTRO">
+  <Nav client:load activa="" />
+  <section class="form-wrap">
+    <h1 class="form-titulo">CREATE ACCOUNT</h1>
+    <form class="form" id="form-registro">
+      <input type="text" name="nombre" placeholder="NAME" required />
+      <input type="email" name="email" placeholder="EMAIL" required />
+      <input type="password" name="password" placeholder="PASSWORD" required />
+      <input type="password" name="confirmar" placeholder="CONFIRM PASSWORD" required />
+      <button type="submit">CREATE ACCOUNT</button>
+      <p class="form-msg"></p>
+    </form>
+    <a class="form-link" href="/login">ALREADY HAVE AN ACCOUNT</a>
+  </section>
+</Layout>
+
+<script>
+  import { registro } from '../lib/auth.js';
+
+  const form = document.getElementById('form-registro') as HTMLFormElement;
+  const msg = form.querySelector('.form-msg') as HTMLParagraphElement;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (form.password.value !== form.confirmar.value) {
+      msg.textContent = 'las contraseñas no coinciden';
+      return;
+    }
+    const datos = {
+      nombre: form.nombre.value,
+      email: form.email.value,
+      password: form.password.value,
+    };
+    const res = await registro(datos);
+    msg.textContent = res.ok ? 'cuenta creada' : 'error al crear cuenta';
+  });
+</script>

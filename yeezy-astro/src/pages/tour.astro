@@ -1,0 +1,26 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.jsx';
+
+const fechas = [
+  { ciudad: 'RUSSIA', recinto: 'GAZPROM ARENA', fecha: '10 OCT 2O26' },
+  { ciudad: 'JAKARTA', recinto: 'GELORA BUNG KARNO', fecha: '24 OCT 2O26' },
+  { ciudad: 'HOUSTON', recinto: 'RELIANT STADIUM', fecha: '31 OCT 2O26' },
+  { ciudad: 'DALLAS', recinto: 'AT&T STADIUM', fecha: '7 NOV 2O26' },
+];
+---
+<Layout title="TOUR">
+  <Nav client:load activa="tour" />
+  <section class="hero">
+    <h1>TOUR 2O26</h1>
+  </section>
+  <section class="lista">
+    {fechas.map(f => (
+      <div class="fila">
+        <span class="ciudad">{f.ciudad}</span>
+        <span class="recinto">{f.recinto}</span>
+        <span class="fecha-col">{f.fecha}</span>
+      </div>
+    ))}
+  </section>
+</Layout>
