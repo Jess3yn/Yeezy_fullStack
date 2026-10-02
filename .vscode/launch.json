@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    
+    {
+      "name": "Django: runserver (config)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/config/manage.py",
+      "args": ["runserver"],
+      "django": true,
+      "cwd": "${workspaceFolder}/config",
+      "envFile": "${workspaceFolder}/config/.env"
+    }
+  ]
+}
