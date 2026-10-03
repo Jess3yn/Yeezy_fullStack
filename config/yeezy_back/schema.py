@@ -1,6 +1,6 @@
 from decimal import Decimal
 import strawberry, strawberry_django
-from django.db import IntegrityError, transaction, connection
+from django.db import transaction, connection
 from strawberry import auto
 from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import models
@@ -8,6 +8,7 @@ from typing import Optional, cast
 from enum import Enum
 from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
+import asyncpg
 from datetime import datetime, timedelta, timezone
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 
@@ -225,11 +226,8 @@ class Query:
         return [RopaTypeQuery(**r) for r in [dict(zip(cols, row)) for row in conn.fetchall()]]
         
     @strawberry_django.field()
-    def mis_pedidos(self, info: strawberry.Info) -> list[PedidoType]:
-        usuario = requerir_usuario(info)
-        return models.Pedido.objects.filter(
-            usuario_id=usuario["usuario_id"]
-        ).order_by("-created_at") # type: ignore
+    def mis_pedidos(self) -> list[PedidoType]:
+        return models.Pedido.objects.order_by("-created_at") # type: ignore
 
 @strawberry.type
 class Mutation:
@@ -403,7 +401,7 @@ class Mutation:
     @strawberry.mutation
     def crear_usuario(self, input:UsuarioInput) -> Optional[Usuario]:
         try:
-            email_info = validate_email(input.email, check_deliverability=False)
+            email_info = validate_email(input.email, check_deliverability=True)
             normalized_email = email_info.normalized
         except EmailNotValidError as e:
             raise Exception(f"Correo invalido: {e}")
@@ -416,16 +414,8 @@ class Mutation:
                 """, [input.nombre, normalized_email, password, "CLIENTE"])
                 usuario = conn.fetchone()
                 cols = [c[0] for c in conn.description]
-            except IntegrityError as error:
-                cause = error.__cause__
-                if (
-                    getattr(cause, "sqlstate", None) == "23505"
-                    or getattr(cause, "pgcode", None) == "23505"
-                ):
-                    raise Exception(
-                        "Este correo ya se encuentra registrado"
-                    ) from error
-                raise
+            except asyncpg.UniqueViolationError:
+                raise Exception("Este correo ya se encuentra registrado")
             return Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}) if usuario else None
     @strawberry.mutation
     def refrescar_token(self, refresh_token:str) -> RefreshPayload:

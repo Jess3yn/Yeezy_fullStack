@@ -19,25 +19,16 @@ import Nav from '../components/Nav.jsx';
 <script>
   import { login } from '../lib/auth.js';
 
-  const form = document.getElementById('form-login');
-  const msg = form.querySelector('.form-msg');
-  const button = form.querySelector('button');
+  const form = document.getElementById('form-login') as HTMLFormElement;
+  const msg = form.querySelector('.form-msg') as HTMLParagraphElement;
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const datos = Object.fromEntries(new FormData(form));
-    button.disabled = true;
-    msg.textContent = 'Conectando…';
-
-    try {
-      await login(datos);
-      msg.textContent = 'Sesión iniciada';
-      window.location.href = '/bully';
-    } catch (error) {
-      msg.textContent =
-        error instanceof Error ? error.message : 'No se pudo iniciar sesión';
-    } finally {
-      button.disabled = false;
-    }
+    const datos = {
+      email: form.email.value,
+      password: form.password.value,
+    };
+    const res = await login(datos);
+    msg.textContent = res.ok ? 'sesion iniciada' : 'datos incorrectos';
   });
 </script>

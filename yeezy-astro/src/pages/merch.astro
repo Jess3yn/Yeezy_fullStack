@@ -2,8 +2,14 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav.jsx';
 import ProductGrid from '../components/ProductGrid.jsx';
+
+const productos = [
+  { id: 1, nombre: 'TOUR HOODIE', imagen: '', stock: 10 },
+  { id: 2, nombre: 'TOUR TEE', imagen: '', stock: 10 },
+  { id: 3, nombre: 'TOUR CAP', imagen: '', stock: 10 },
+];
 ---
 <Layout title="MERCH">
   <Nav client:load activa="merch" />
-  <ProductGrid tipo="ropa" client:load />
+  <ProductGrid productos={productos} />
 </Layout>

@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from django.conf import settings
 from jose import jwt, JWTError
+import os
+from dotenv import load_dotenv
 import uuid
 
-SECRET_KEY = settings.SECRET_KEY
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 REFRESH_EXPIRACION_DIAS = 7
 ACCESS_EXPIRACION_MIN = 30

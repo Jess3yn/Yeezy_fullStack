@@ -2,8 +2,11 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav.jsx';
 import CategoriasShop from '../components/CategoriasShop.jsx';
+import { getProductos } from '../lib/api.js';
+
+const productos = await getProductos();
 ---
 <Layout title="YZY">
   <Nav client:load activa="shop" />
-  <CategoriasShop client:load />
+  <CategoriasShop client:load productos={productos} />
 </Layout>
