@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
 import asyncpg
 from datetime import datetime, timedelta, timezone
-from jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
+from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 
 
 
@@ -42,16 +42,6 @@ class GeneroEnum(Enum):
   
 Genero = strawberry.enum(GeneroEnum)
 
-@strawberry.type
-class AuthPayload:
-    access_token: str
-    refresh_token: str
-    usuario: Usuario
-    
-@strawberry.type
-class RefreshPayload:
-    access_token: str
-    refresh_token: str
 
 #Usuario
 @strawberry.type
@@ -72,6 +62,17 @@ class UsuarioInput:
 class LoginInput:
     email: str
     password: str
+
+@strawberry.type
+class AuthPayload:
+    access_token: str
+    refresh_token: str
+    usuario: Usuario
+    
+@strawberry.type
+class RefreshPayload:
+    access_token: str
+    refresh_token: str
 
 #Categoria
 
@@ -286,26 +287,27 @@ class Mutation:
             return RopaType(id= ropa_id, nombre=nombre, stock=stock, precio=precio, categoria_id=categoria_id, imagen=imagen, talla=talla, genero=genero)
         
     @strawberry.mutation
-    async def login(self, input: LoginInput) -> AuthPayload:
+    def login(self, input: LoginInput) -> AuthPayload:
         with transaction.atomic():
             conn = connection.cursor()
-            await conn.execute("""
+            conn.execute("""
                 SELECT * FROM usuarios WHERE email = %s
             """, [input.email])
             usuario = conn.fetchone()
+            cols = [c[0] for c in conn.description]
             if usuario is None or not pwd_context.verify(input.password, usuario[2]):
                 raise Exception("Invalid Credentials")
-            access_token = generar_access_token({"usuario_id" : usuario[0], "email": usuario[1],"rol": usuario[5]})
-            refresh_token, jti = generar_refresh_token({"usuario_id" : usuario[0], " email": usuario[1], "rol": usuario[5]})
+            access_token = generar_access_token({"usuario_id" : usuario[0], "email": usuario[1],"rol": usuario[3]})
+            refresh_token, jti = generar_refresh_token({"usuario_id" : usuario[0], " email": usuario[1], "rol": usuario[3]})
             expires = datetime.now(timezone.utc) + timedelta(days=7)
-            await conn.execute(
+            conn.execute(
                 """
                 INSERT INTO refresh_tokens (usuario_id, jti, expires_at) VALUES  (%s,%s,%s)
                 """
             , [usuario[0], jti, expires])
-            return AuthPayload(access_token=access_token, refresh_token=refresh_token, usuario=Usuario(**{**dict(usuario), "rol": RolEnum(usuario[5])}))
+            return AuthPayload(access_token=access_token, refresh_token=refresh_token, usuario=Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}))
     @strawberry.mutation
-    async def crear_usuario(self, input:UsuarioInput) -> Optional[Usuario]:
+    def crear_usuario(self, input:UsuarioInput) -> Optional[Usuario]:
         try:
             email_info = validate_email(input.email, check_deliverability=True)
             normalized_email = email_info.normalized
@@ -315,71 +317,72 @@ class Mutation:
         
         with connection.cursor() as conn:
             try:
-                await conn.execute("""
-                    NSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s) RETURNING *
+                conn.execute("""
+                    INSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s) RETURNING *
                 """, [input.nombre, normalized_email, password, "CLIENTE"])
                 usuario = conn.fetchone()
+                cols = [c[0] for c in conn.description]
             except asyncpg.UniqueViolationError:
                 raise Exception("Este correo ya se encuentra registrado")
-            return Usuario(**{**dict(usuario), "rol" : RolEnum(usuario[5])}) if usuario else None
+            return Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}) if usuario else None
     @strawberry.mutation
-    async def refrescar_token(self, refresh_token:str) -> RefreshPayload:
+    def refrescar_token(self, refresh_token:str) -> RefreshPayload:
         payload = decodificar_token(refresh_token)
         if payload is None or payload.get("tipo") != "refresh":
             raise Exception("Refresh Token Invalido")
         jti = payload["jti"]
         usuario_id = payload["usuario_id"]
         with connection.cursor() as conn:
-            await conn.execute("""
+            conn.execute("""
                 SELECT * FROM refresh_tokens WHERE jti = %s
             """, [jti])
             refresh = conn.fetchone()
             if refresh is None:
                 raise Exception("Refresh Token Invalido")
             if refresh[3]:
-                await conn.execute("""
+                conn.execute("""
                     UPDATE refresh_tokens SET usado = TRUE WHERE usuario_id =  %s
                 """, [usuario_id])
                 raise Exception("Refresh Token ya utilizado - Session Terminated")
-            await conn.execute("""
+            conn.execute("""
                     UPDATE refresh_tokens SET usado = TRUE WHERE jti =  %s
             """, [jti])
-            await conn.execute("""
+            conn.execute("""
                  SELECT * FROM usuarios WHERE id = %s
             """, [usuario_id])
             usuario = conn.fetchone()
             nuevo_access = generar_access_token({
                 "usuario_id" : usuario[0],
                 "email": usuario[1],
-                "rol": usuario[5],
+                "rol": usuario[3],
             })
             nuevo_refresh, nuevo_jti = generar_refresh_token({
                 "usuario_id" : usuario[0],
                 "email": usuario[1],
-                "rol": usuario[5],
+                "rol": usuario[3],
              })
             expires = datetime.now(timezone.utc) + timedelta(days=7)
-            await conn.execute(
+            conn.execute(
             """
             INSERT INTO refresh_tokens (usuario_id, jti, expires_at) VALUES  (%s,%s,%s)             
             """ , [usuario_id, nuevo_jti, expires])
         return RefreshPayload(access_token=nuevo_access, refresh_token=nuevo_refresh)
 
     @strawberry.mutation
-    async def logout(self, refresh_token: str) -> bool:
+    def logout(self, refresh_token: str) -> bool:
         payload = decodificar_token(refresh_token)
         if payload is None or payload.get("tipo") != "refresh":
             raise Exception("Refresh Token Inválido")
         
         jti = payload["jti"]
         with connection.cursor() as conn:
-            await conn.exe("""
+            conn.exe("""
             SELECT * FROM refresh_tokens WHERE jti = %s
             """,  [jti])
             refresh = conn.fetchone()
             if refresh is None:
                 raise Exception("Refresh Token Inválido")
-            await conn.execute("UPDATE refresh_tokens SET usado = TRUE WHERE jti = %s", jti)
+            conn.execute("UPDATE refresh_tokens SET usado = TRUE WHERE jti = %s", jti)
         return True
     
     # @strawberry.mutation()
