@@ -9,6 +9,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "storage:upload": "node scripts/upload-images-to-supabase.mjs",
+    "storage:dry-run": "node scripts/upload-images-to-supabase.mjs --dry-run",
     "astro": "astro"
   },
   "dependencies": {

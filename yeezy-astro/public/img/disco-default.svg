@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-labelledby="title">
+  <title id="title">Carátula genérica de disco</title>
+  <rect width="600" height="600" fill="#efefed"/>
+  <rect x="34" y="34" width="532" height="532" fill="#171717"/>
+  <circle cx="300" cy="300" r="194" fill="#282828"/>
+  <circle cx="300" cy="300" r="178" fill="none" stroke="#575757" stroke-width="2"/>
+  <circle cx="300" cy="300" r="150" fill="none" stroke="#575757" stroke-width="2"/>
+  <circle cx="300" cy="300" r="122" fill="none" stroke="#575757" stroke-width="2"/>
+  <circle cx="300" cy="300" r="94" fill="none" stroke="#575757" stroke-width="2"/>
+  <circle cx="300" cy="300" r="64" fill="#dededb"/>
+  <circle cx="300" cy="300" r="7" fill="#171717"/>
+  <text x="300" y="100" fill="#f4f4f1" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="9" text-anchor="middle">YZY RECORDS</text>
+  <text x="300" y="502" fill="#f4f4f1" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="6" text-anchor="middle">VINYL • CD • CASSETTE</text>
+</svg>

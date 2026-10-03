@@ -15,6 +15,10 @@ pnpm-debug.log*
 
 # environment variables
 .env
+.env.*
+!.env.example
+!.env.storage.example
+.env.storage
 .env.production
 
 # macOS-specific files

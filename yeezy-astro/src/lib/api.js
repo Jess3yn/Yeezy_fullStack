@@ -1,36 +1,159 @@
-const productos = [
-  { id: 1, nombre: 'TS-03', imagen: '/img/ts-03.png', precio: 90, seccion: 'top', stock: 10 },
-  { id: 2, nombre: 'LS-03', imagen: '/img/ls-03.png', precio: 120, seccion: 'top', stock: 10 },
-  { id: 3, nombre: 'HD-03', imagen: '/img/hd-03.png', precio: 180, seccion: 'top', stock: 10 },
-  { id: 4, nombre: 'WB-01', imagen: '/img/wb-01.png', precio: 220, seccion: 'top', stock: 10 },
-  { id: 9, nombre: 'TT-06', imagen: '/img/tt-06.png', precio: 70, seccion: 'top', stock: 10 },
-  { id: 5, nombre: 'SH-01', imagen: '/img/sh-01.png', precio: 95, seccion: 'bottom', stock: 10 },
-  { id: 6, nombre: 'SP-06', imagen: '/img/sp-06.png', precio: 150, seccion: 'bottom', stock: 10 },
-  { id: 7, nombre: 'PT-04', imagen: '/img/pt-04.png', precio: 160, seccion: 'bottom', stock: 10 },
-  { id: 8, nombre: 'PT-05', imagen: '/img/pt-05.png', precio: 160, seccion: 'bottom', stock: 10 },
-  { id: 10, nombre: 'BX-01', imagen: '/img/bx-01.png', precio: 45, seccion: 'under', stock: 10 },
-  { id: 11, nombre: 'SK-01', imagen: '/img/sk-01.png', precio: 30, seccion: 'under', stock: 10 },
-  { id: 12, nombre: 'AB-01', imagen: '/img/ab-01.png', precio: 260, seccion: 'calzado', destacado: true, stock: 10 },
-  { id: 19, nombre: '800S', imagen: '/img/800s.png', precio: 240, seccion: 'calzado', destacado: true, stock: 10 },
-  { id: 20, nombre: 'YS-01', imagen: '/img/ys-01.png', precio: 220, seccion: 'calzado', stock: 10 },
-  { id: 21, nombre: 'YS-02', imagen: '/img/ys-02.png', precio: 220, seccion: 'calzado', stock: 10 },
-  { id: 22, nombre: 'BP-01', imagen: '/img/bp-01.png', precio: 80, seccion: 'accesorio', stock: 10 },
-  { id: 23, nombre: 'BP-02', imagen: '/img/bp-02.png', precio: 130, seccion: 'accesorio', stock: 10 },
-  { id: 24, nombre: 'SG-03', imagen: '/img/sg-03.png', precio: 160, seccion: 'accesorio', stock: 10 },
-];
+import { authenticatedGraphqlRequest } from './auth.js';
 
-export async function getProductos() {
-  return productos;
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/+$/, '');
+const defaultDiscImage = '/img/disco-default.svg';
+
+function imageUrl(filename) {
+  return supabaseUrl
+    ? `${supabaseUrl}/storage/v1/object/public/product_images/products/${encodeURIComponent(filename)}`
+    : `/img/${filename}`;
 }
 
-const discos = [
-  { id: 101, nombre: 'BULLY LP SIGNED', imagen: '', precio: 60, stock: 10 },
-  { id: 102, nombre: 'CLEAR LP SIGNED', imagen: '', precio: 60, stock: 10 },
-  { id: 103, nombre: 'BULLY CD', imagen: '', precio: 25, stock: 10 },
-  { id: 104, nombre: 'BULLY CASSETTE', imagen: '', precio: 20, stock: 10 },
-  { id: 105, nombre: 'DIGITAL ALBUM', imagen: '', precio: 10, stock: 10 },
-];
+function categorySlug(value) {
+  return String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '-');
+}
+
+function numericId(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : value;
+}
+
+function numericPrice(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new Error('El backend devolvió un precio de producto inválido.');
+  }
+  return number;
+}
+
+function productImage(value) {
+  if (!value) {
+    return '';
+  }
+
+  const image = String(value).trim();
+  if (/^https?:\/\//i.test(image) || image.startsWith('/')) {
+    return image;
+  }
+
+  return imageUrl(image.replace(/^products\//, ''));
+}
+
+export async function getProductos() {
+  const data = await authenticatedGraphqlRequest(`
+    query Ropa {
+      ropa {
+        id
+        nombre
+        imagen
+        stock
+        precio
+        categoria
+      }
+    }
+  `);
+
+  if (!Array.isArray(data?.ropa)) {
+    throw new Error('El backend no devolvió la lista de ropa esperada.');
+  }
+
+  return data.ropa.map((producto) => {
+    const seccion = categorySlug(producto.categoria);
+    return {
+      id: numericId(producto.id),
+      nombre: producto.nombre,
+      imagen: productImage(producto.imagen),
+      precio: numericPrice(producto.precio),
+      seccion,
+      ...(seccion === 'destacado' ? { destacado: true } : {}),
+      stock: Number(producto.stock),
+    };
+  });
+}
 
 export async function getDiscos() {
-  return discos;
+  const data = await authenticatedGraphqlRequest(`
+    query Discos {
+      discos {
+        id
+        nombre
+        imagen
+        stock
+        precio
+      }
+    }
+  `);
+
+  if (!Array.isArray(data?.discos)) {
+    throw new Error('El backend no devolvió la lista de discos esperada.');
+  }
+
+  return data.discos.map((disco) => ({
+    id: numericId(disco.id),
+    nombre: disco.nombre,
+    imagen: productImage(disco.imagen) || defaultDiscImage,
+    precio: numericPrice(disco.precio),
+    stock: Number(disco.stock),
+  }));
+}
+
+export async function crearPedido(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('El carrito está vacío.');
+  }
+
+  const data = await authenticatedGraphqlRequest(
+    `mutation CrearPedido($datos: [ItemInput!]!) {
+      crearPedido(datos: $datos) {
+        id
+      }
+    }`,
+    {
+      datos: items.map((item) => ({
+        productoId: String(item.productoId),
+        cantidad: Number(item.cantidad),
+      })),
+    },
+  );
+
+  if (!Array.isArray(data?.crearPedido)) {
+    throw new Error('El backend no confirmó la creación del pedido.');
+  }
+
+  return data.crearPedido;
+}
+
+export async function getMisPedidos() {
+  const data = await authenticatedGraphqlRequest(`
+    query MisPedidos {
+      misPedidos {
+        id
+        productoId
+        productoNombre
+        imagen
+        cantidad
+        precioTotal
+        createdAt
+      }
+    }
+  `);
+
+  if (!Array.isArray(data?.misPedidos)) {
+    throw new Error('El backend no devolvió tu historial de pedidos.');
+  }
+
+  return data.misPedidos.map((pedido) => ({
+    id: numericId(pedido.id),
+    productoId: numericId(pedido.productoId),
+    nombre: pedido.productoNombre,
+    imagen: productImage(pedido.imagen),
+    cantidad: Number(pedido.cantidad),
+    precioTotal: numericPrice(pedido.precioTotal),
+    createdAt: pedido.createdAt,
+  }));
 }

@@ -7,10 +7,10 @@ import Nav from '../components/Nav.jsx';
   <section class="form-wrap">
     <h1 class="form-titulo">LOG IN</h1>
     <form class="form" id="form-login">
-      <input type="email" name="email" placeholder="EMAIL" required />
-      <input type="password" name="password" placeholder="PASSWORD" required />
+      <input type="email" name="email" placeholder="EMAIL" autocomplete="email" required />
+      <input type="password" name="password" placeholder="PASSWORD" autocomplete="current-password" required />
       <button type="submit">LOG IN</button>
-      <p class="form-msg"></p>
+      <p class="form-msg" aria-live="polite"></p>
     </form>
     <a class="form-link" href="/registro">CREATE ACCOUNT</a>
   </section>
@@ -19,16 +19,32 @@ import Nav from '../components/Nav.jsx';
 <script>
   import { login } from '../lib/auth.js';
 
-  const form = document.getElementById('form-login') as HTMLFormElement;
-  const msg = form.querySelector('.form-msg') as HTMLParagraphElement;
+  const form = document.querySelector<HTMLFormElement>('#form-login');
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const datos = {
-      email: form.email.value,
-      password: form.password.value,
-    };
-    const res = await login(datos);
-    msg.textContent = res.ok ? 'sesion iniciada' : 'datos incorrectos';
-  });
+  if (form) {
+    const msg = form.querySelector<HTMLParagraphElement>('.form-msg');
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!msg || !button) return;
+
+      const values = new FormData(form);
+      const email = String(values.get('email') ?? '').trim();
+      const password = String(values.get('password') ?? '');
+      button.disabled = true;
+      msg.textContent = 'Iniciando sesión...';
+
+      try {
+        await login({ email, password });
+        msg.textContent = 'Sesión iniciada correctamente.';
+      } catch (error) {
+        msg.textContent = error instanceof Error
+          ? error.message
+          : 'No';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
 </script>

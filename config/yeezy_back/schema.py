@@ -1,6 +1,6 @@
 from decimal import Decimal
 import strawberry, strawberry_django
-from django.db import transaction, connection
+from django.db import IntegrityError, transaction, connection
 from strawberry import auto
 from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import models
@@ -8,7 +8,6 @@ from typing import Optional, cast
 from enum import Enum
 from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
-import asyncpg
 from datetime import datetime, timedelta, timezone
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 
@@ -59,6 +58,10 @@ class UsuarioInput:
     password: str
 
 @strawberry.input
+class CategoriaInput:
+    nombre: str
+
+@strawberry.input
 class LoginInput:
     email: str
     password: str
@@ -91,8 +94,8 @@ class DiscoType:
     precio: Decimal
     categoria_id: int
     artista: str
-    duracion: int
-    year: int
+    duracion: int | None
+    year: int | None
 
 @strawberry.type()
 class DiscoTypeQuery:
@@ -103,8 +106,8 @@ class DiscoTypeQuery:
     precio: Decimal
     categoria: str
     artista: str
-    duracion: int
-    year: int
+    duracion: int | None
+    year: int | None
 
 @strawberry.input
 class DiscoInput:
@@ -114,8 +117,8 @@ class DiscoInput:
     precio: Decimal
     categoria_id: int
     artista: str
-    duracion: int
-    year: int
+    duracion: int | None = None
+    year: int | None = None
 
 #Ropa
 @strawberry.type()
@@ -175,6 +178,17 @@ class ItemInput:
     producto_id: strawberry.ID
     cantidad: int
 
+
+@strawberry.type
+class PedidoHistorialType:
+    id: strawberry.ID
+    producto_id: strawberry.ID
+    producto_nombre: str
+    imagen: str | None
+    cantidad: int
+    precio_total: Decimal
+    created_at: datetime
+
 # @strawberry.input
 # class ProductoInput:
 #     nombre: str
@@ -225,64 +239,228 @@ class Query:
         cols = [c[0] for c in conn.description]
         return [RopaTypeQuery(**r) for r in [dict(zip(cols, row)) for row in conn.fetchall()]]
         
-    @strawberry_django.field()
-    def mis_pedidos(self) -> list[PedidoType]:
-        return models.Pedido.objects.order_by("-created_at") # type: ignore
+    @strawberry.field
+    def mis_pedidos(self, info: strawberry.Info) -> list[PedidoHistorialType]:
+        usuario = requerir_usuario(info)
+        try:
+            usuario_id = int(usuario["usuario_id"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise Exception("Usuario inválido") from error
+
+        with connection.cursor() as conn:
+            conn.execute(
+                """
+                SELECT pe.id, pe.id_producto AS producto_id,
+                       p.nombre AS producto_nombre,
+                       p.imagen, pe.cantidad, pe."precioTotal" AS precio_total,
+                       pe.created_at
+                FROM pedidos pe
+                JOIN productos p ON p.id = pe.id_producto
+                WHERE pe.id_usuario = %s
+                ORDER BY pe.created_at DESC, pe.id DESC
+                """,
+                [usuario_id],
+            )
+            columnas = [column[0] for column in conn.description]
+            return [
+                PedidoHistorialType(**dict(zip(columnas, row)))
+                for row in conn.fetchall()
+            ]
 
 @strawberry.type
 class Mutation:
 
     @strawberry.mutation
-    def crear_disco(self,info: strawberry.Info,input: DiscoInput) -> DiscoType | None:
+    def crear_categoria(
+        self, info: strawberry.Info, input: CategoriaInput
+    ) -> CategoriaType:
         requerir_admin(info)
+        nombre = input.nombre.strip()
         with transaction.atomic():
-            conn = connection.cursor()
-            nombre = input.nombre
-            precio = input.precio
-            categoria_id = input.categoria_id
-            stock = input.stock
-            imagen = input.imagen
-            artista = input.artista
-            duracion = input.duracion
-            year = input.year
-            conn.execute("""
-                WITH nuevo AS (
-                  INSERT INTO productos (tipo, nombre, precio, categoria_id, stock, imagen)
-                  VALUES ('disco', %s, %s, %s, %s, %s)
-                  RETURNING id
+            with connection.cursor() as conn:
+                conn.execute("SELECT pg_advisory_xact_lock(74839201)")
+                conn.execute(
+                    """
+                    SELECT id, nombre FROM categorias WHERE LOWER(BTRIM(nombre)) = LOWER(%s)
+                    ORDER BY id
+                    LIMIT 1
+                    """,
+                    [nombre],
                 )
-                INSERT INTO discos (producto_id, artista, duracion, year)
-                SELECT id, %s, %s::bigint, %s::bigint FROM nuevo
-                RETURNING producto_id
-            """, [nombre, precio, categoria_id, stock, imagen , artista, duracion, year])
-            disco_id = conn.fetchone()[0]
-            
-            return DiscoType(id=disco_id, nombre=nombre, imagen=imagen,stock=stock, precio=precio, categoria_id=categoria_id, artista=artista, duracion=duracion, year=year)
+                categoria = conn.fetchone()
+                if categoria is not None:
+                    return CategoriaType(id=categoria[0], nombre=categoria[1])
+
+                conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM categorias")
+                categoria_id = conn.fetchone()[0]
+                conn.execute(
+                    """
+                    INSERT INTO categorias (id, nombre)
+                    VALUES (%s, %s)
+                    RETURNING id, nombre
+                    """,
+                    [categoria_id, nombre],
+                )
+                categoria = conn.fetchone()
+        return CategoriaType(id=categoria[0], nombre=categoria[1])
+
+    @strawberry.mutation
+    def crear_disco(
+        self, info: strawberry.Info, input: DiscoInput
+    ) -> DiscoType:
+        requerir_admin(info)
+        nombre = input.nombre.strip()
+        artista = input.artista.strip()
+        if not nombre:
+            raise Exception("El nombre del disco es obligatorio")
+        if not artista:
+            raise Exception("El artista es obligatorio")
+        if input.stock < 0:
+            raise Exception("El stock no puede ser negativo")
+        if input.precio < 0:
+            raise Exception("El precio no puede ser negativo")
+
+        with transaction.atomic():
+            with connection.cursor() as conn:
+                conn.execute("SELECT pg_advisory_xact_lock(74839202)")
+                conn.execute(
+                    """
+                    SELECT id, tipo, precio, categoria_id, imagen, stock
+                    FROM productos
+                    WHERE LOWER(BTRIM(nombre)) = LOWER(%s)
+                    LIMIT 1
+                    """,
+                    [nombre],
+                )
+                existente = conn.fetchone()
+                if existente is not None:
+                    if existente[1] != "disco":
+                        raise Exception("Ya existe otro tipo de producto con ese nombre")
+                    conn.execute(
+                        """
+                        SELECT artista, duracion, year
+                        FROM discos
+                        WHERE producto_id = %s
+                        """,
+                        [existente[0]],
+                    )
+                    detalles = conn.fetchone()
+                    if detalles is None:
+                        raise Exception("El disco existente no tiene sus datos asociados")
+                    return DiscoType(
+                        id=existente[0],
+                        nombre=nombre,
+                        imagen=existente[4],
+                        stock=existente[5],
+                        precio=existente[2],
+                        categoria_id=existente[3],
+                        artista=detalles[0],
+                        duracion=detalles[1],
+                        year=detalles[2],
+                    )
+
+                conn.execute(
+                    "SELECT 1 FROM categorias WHERE id = %s",
+                    [input.categoria_id],
+                )
+                if conn.fetchone() is None:
+                    raise Exception("La categoría indicada no existe")
+
+                conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM productos")
+                disco_id = conn.fetchone()[0]
+                conn.execute(
+                    """
+                    INSERT INTO productos
+                        (id, tipo, nombre, precio, categoria_id, stock, imagen)
+                    VALUES (%s, 'disco', %s, %s, %s, %s, %s)
+                    """,
+                    [
+                        disco_id,
+                        nombre,
+                        input.precio,
+                        input.categoria_id,
+                        input.stock,
+                        input.imagen,
+                    ],
+                )
+                conn.execute(
+                    """
+                    INSERT INTO discos (producto_id, artista, duracion, year)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    [disco_id, artista, input.duracion, input.year],
+                )
+
+        return DiscoType(
+            id=disco_id,
+            nombre=nombre,
+            imagen=input.imagen,
+            stock=input.stock,
+            precio=input.precio,
+            categoria_id=input.categoria_id,
+            artista=artista,
+            duracion=input.duracion,
+            year=input.year,
+        )
     
     @strawberry.mutation
-    def crear_ropa(self,info:strawberry.Info,input: RopaInput) -> RopaType | None:
+    def crear_ropa(
+        self, info: strawberry.Info, input: RopaInput
+    ) -> RopaType:
         requerir_admin(info)
+        nombre = input.nombre.strip()
+        if not nombre:
+            raise Exception("El nombre del producto es obligatorio")
+        if input.stock < 0:
+            raise Exception("El stock no puede ser negativo")
+        if input.precio < 0:
+            raise Exception("El precio no puede ser negativo")
+
         with transaction.atomic():
-            conn = connection.cursor()
-            nombre = input.nombre
-            precio = input.precio
-            categoria_id = input.categoria_id
-            stock = input.stock
-            imagen = input.imagen
-            talla = input.talla
-            genero = input.genero
-            conn.execute("""
-            WITH nuevo AS (
-              INSERT INTO productos (tipo, nombre, stock, precio, categoria_id, imaagen)
-              VALUES ('ropa', %s, %s, %s, %s.%s)
-              RETURNING id
-            )
-            INSERT INTO ropa (producto_id, talla, genero)
-            SELECT id, %s, %s FROM nuevo
-            RETURNING producto_id
-        """, [nombre, stock, precio, categoria_id, imagen, talla, genero])
-            ropa_id = conn.fetchone()[0]
-            return RopaType(id= ropa_id, nombre=nombre, stock=stock, precio=precio, categoria_id=categoria_id, imagen=imagen, talla=talla, genero=genero)
+            with connection.cursor() as conn:
+                conn.execute("SELECT pg_advisory_xact_lock(74839202)")
+                conn.execute(
+                    "SELECT 1 FROM categorias WHERE id = %s",
+                    [input.categoria_id],
+                )
+                if conn.fetchone() is None:
+                    raise Exception("La categoría indicada no existe")
+
+                conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM productos")
+                producto_id = conn.fetchone()[0]
+                conn.execute(
+                    """
+                    INSERT INTO productos
+                        (id, tipo, nombre, stock, precio, categoria_id, imagen)
+                    VALUES (%s, 'ropa', %s, %s, %s, %s, %s)
+                    """,
+                    [
+                        producto_id,
+                        nombre,
+                        input.stock,
+                        input.precio,
+                        input.categoria_id,
+                        input.imagen,
+                    ],
+                )
+                conn.execute(
+                    """
+                    INSERT INTO ropa (producto_id, talla, genero)
+                    VALUES (%s, %s, %s)
+                    """,
+                    [producto_id, input.talla, input.genero.value],
+                )
+
+        return RopaType(
+            id=producto_id,
+            nombre=nombre,
+            imagen=input.imagen,
+            stock=input.stock,
+            precio=input.precio,
+            categoria_id=input.categoria_id,
+            talla=input.talla,
+            genero=input.genero,
+        )
     
     @strawberry.mutation
     def crear_pedido(
@@ -383,8 +561,11 @@ class Mutation:
         with transaction.atomic():
             conn = connection.cursor()
             conn.execute("""
-                SELECT * FROM usuarios WHERE email = %s
-            """, [input.email])
+                SELECT id, email, password, rol, nombre
+                FROM usuarios
+                WHERE LOWER(email) = LOWER(%s)
+                LIMIT 1
+            """, [input.email.strip()])
             usuario = conn.fetchone()
             cols = [c[0] for c in conn.description]
             if usuario is None or not pwd_context.verify(input.password, usuario[2]):
@@ -400,23 +581,31 @@ class Mutation:
             return AuthPayload(access_token=access_token, refresh_token=refresh_token, usuario=Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}))
     @strawberry.mutation
     def crear_usuario(self, input:UsuarioInput) -> Optional[Usuario]:
+        nombre = input.nombre.strip()
+        if not nombre:
+            raise Exception("El nombre es obligatorio")
+        if len(input.password) < 8:
+            raise Exception("La contraseña debe tener al menos 8 caracteres")
+
         try:
-            email_info = validate_email(input.email, check_deliverability=True)
-            normalized_email = email_info.normalized
+            email_info = validate_email(input.email.strip(), check_deliverability=False)
+            normalized_email = email_info.normalized.casefold()
         except EmailNotValidError as e:
             raise Exception(f"Correo invalido: {e}")
         password = pwd_context.hash(input.password)
         
-        with connection.cursor() as conn:
-            try:
+        try:
+            with connection.cursor() as conn:
                 conn.execute("""
-                    INSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s) RETURNING *
-                """, [input.nombre, normalized_email, password, "CLIENTE"])
+                    INSERT INTO usuarios (nombre, email, password, rol)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, email, password, rol, nombre
+                """, [nombre, normalized_email, password, "CLIENTE"])
                 usuario = conn.fetchone()
                 cols = [c[0] for c in conn.description]
-            except asyncpg.UniqueViolationError:
-                raise Exception("Este correo ya se encuentra registrado")
-            return Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}) if usuario else None
+        except IntegrityError as e:
+            raise Exception("Este correo ya se encuentra registrado") from e
+        return Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}) if usuario else None
     @strawberry.mutation
     def refrescar_token(self, refresh_token:str) -> RefreshPayload:
         payload = decodificar_token(refresh_token)

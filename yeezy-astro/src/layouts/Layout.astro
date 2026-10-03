@@ -92,9 +92,35 @@ const { title = 'YZY' } = Astro.props;
   justify-content: center;
   overflow: hidden;
 }
+  button.imagen-agregar {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  button.imagen-agregar:disabled { cursor: not-allowed; }
+  button.imagen-agregar:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+  button.imagen-agregar:disabled img { opacity: .35; }
   .imagen img { width: 100%; height: 100%; object-fit: contain; transition: opacity .15s ease, transform .25s ease; }
   .producto:hover .imagen img { opacity: .6; transform: scale(1.06); }
+  .imagen-agregar:disabled img { transform: none; }
   .sin-imagen { width: 60%; height: 60%; background: #f2f2f2; }
+  .cart-notice {
+    position: fixed;
+    z-index: 30;
+    right: 20px;
+    bottom: 20px;
+    max-width: min(420px, calc(100vw - 40px));
+    margin: 0;
+    padding: 14px 18px;
+    background: #111;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 4px 20px #0002;
+  }
+  .cart-notice a { margin-left: 8px; color: #fff; text-decoration: underline; }
+  .cart-notice-error { background: #8c1d18; }
   .nombre { font-size: 11px; letter-spacing: 0.5px; color: #111; margin: 0; text-align: center; }
   .seccion {
     font-size: 10px;
@@ -115,6 +141,30 @@ const { title = 'YZY' } = Astro.props;
   }
   .hero h1 { font-size: 13px; font-weight: 400; letter-spacing: 3px; margin: 0; }
   .lista { padding: 0 24px 50px; max-width: 700px; margin: 0 auto; }
+  .cart-page { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+  .cart-page > .form-titulo { text-align: center; margin-bottom: 24px; }
+  .cart-item-image { width: 76px; height: 76px; flex: 0 0 76px; }
+  .cart-item-image img { width: 100%; height: 100%; object-fit: contain; }
+  .cart-item-info { flex: 1; display: grid; gap: 5px; }
+  .cart-quantity input { width: 64px; padding: 6px; border: 1px solid #ddd; font: inherit; }
+  .cart-remove { border: 0; background: transparent; color: #888; font: inherit; font-size: 10px; cursor: pointer; }
+  .cart-total { display: flex; justify-content: flex-end; gap: 24px; padding: 20px 0; font-size: 12px; }
+  .cart-checkout {
+    display: block;
+    width: 100%;
+    background: #111;
+    color: #fff;
+    border: 0;
+    padding: 14px;
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .cart-checkout:disabled { opacity: .5; cursor: wait; }
+  .order-history { margin-top: 56px; }
+  .order-heading { display: flex; align-items: center; justify-content: space-between; }
+  .order-row { justify-content: space-between; font-size: 12px; }
   .fila {
     display: flex;
     align-items: center;
@@ -180,5 +230,8 @@ const { title = 'YZY' } = Astro.props;
   }
   @media (max-width: 480px) {
     .grid { grid-template-columns: repeat(2, 1fr); }
+    .cart-row { flex-wrap: wrap; gap: 10px; }
+    .cart-item-info { min-width: calc(100% - 90px); }
+    .cart-quantity { margin-left: 86px; }
   }
 </style>

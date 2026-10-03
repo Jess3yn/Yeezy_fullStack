@@ -7,12 +7,12 @@ import Nav from '../components/Nav.jsx';
   <section class="form-wrap">
     <h1 class="form-titulo">CREATE ACCOUNT</h1>
     <form class="form" id="form-registro">
-      <input type="text" name="nombre" placeholder="NAME" required />
-      <input type="email" name="email" placeholder="EMAIL" required />
-      <input type="password" name="password" placeholder="PASSWORD" required />
-      <input type="password" name="confirmar" placeholder="CONFIRM PASSWORD" required />
+      <input type="text" name="nombre" placeholder="NAME" autocomplete="name" required />
+      <input type="email" name="email" placeholder="EMAIL" autocomplete="email" required />
+      <input type="password" name="password" placeholder="PASSWORD" autocomplete="new-password" minlength="8" required />
+      <input type="password" name="confirmar" placeholder="CONFIRM PASSWORD" autocomplete="new-password" minlength="8" required />
       <button type="submit">CREATE ACCOUNT</button>
-      <p class="form-msg"></p>
+      <p class="form-msg" aria-live="polite"></p>
     </form>
     <a class="form-link" href="/login">ALREADY HAVE AN ACCOUNT</a>
   </section>
@@ -21,21 +21,40 @@ import Nav from '../components/Nav.jsx';
 <script>
   import { registro } from '../lib/auth.js';
 
-  const form = document.getElementById('form-registro') as HTMLFormElement;
-  const msg = form.querySelector('.form-msg') as HTMLParagraphElement;
+  const form = document.querySelector<HTMLFormElement>('#form-registro');
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (form.password.value !== form.confirmar.value) {
-      msg.textContent = 'las contraseñas no coinciden';
-      return;
-    }
-    const datos = {
-      nombre: form.nombre.value,
-      email: form.email.value,
-      password: form.password.value,
-    };
-    const res = await registro(datos);
-    msg.textContent = res.ok ? 'cuenta creada' : 'error al crear cuenta';
-  });
+  if (form) {
+    const msg = form.querySelector<HTMLParagraphElement>('.form-msg');
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!msg || !button) return;
+
+      const values = new FormData(form);
+      const nombre = String(values.get('nombre') ?? '').trim();
+      const email = String(values.get('email') ?? '').trim();
+      const password = String(values.get('password') ?? '');
+      const confirmar = String(values.get('confirmar') ?? '');
+
+      if (password !== confirmar) {
+        msg.textContent = 'Las contraseñas no coinciden.';
+        return;
+      }
+
+      button.disabled = true;
+      msg.textContent = 'Creando cuenta...';
+
+      try {
+        await registro({ nombre, email, password });
+        msg.textContent = 'Cuenta creada. Ya iniciaste sesión.';
+      } catch (error) {
+        msg.textContent = error instanceof Error
+          ? error.message
+          : 'No fue posible crear la cuenta.';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
 </script>
