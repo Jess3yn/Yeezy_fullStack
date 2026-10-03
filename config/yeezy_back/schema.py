@@ -1,14 +1,13 @@
 from decimal import Decimal
 import strawberry, strawberry_django
-from django.db import transaction, connection
+from django.db import IntegrityError, transaction, connection
 from strawberry import auto
 from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import models
-from typing import Optional
+from typing import Optional, cast
 from enum import Enum
 from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
-import asyncpg
 from datetime import datetime, timedelta, timezone
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 
@@ -170,8 +169,6 @@ class PedidoType:
     created_at: auto
     producto: ProductoType | None
 
-
-
 @strawberry.input
 class ItemInput:
     producto_id: strawberry.ID
@@ -228,8 +225,11 @@ class Query:
         return [RopaTypeQuery(**r) for r in [dict(zip(cols, row)) for row in conn.fetchall()]]
         
     @strawberry_django.field()
-    def mis_pedidos(self) -> list[PedidoType]:
-        return models.Pedido.objects.order_by("-created_at") # type: ignore
+    def mis_pedidos(self, info: strawberry.Info) -> list[PedidoType]:
+        usuario = requerir_usuario(info)
+        return models.Pedido.objects.filter(
+            usuario_id=usuario["usuario_id"]
+        ).order_by("-created_at") # type: ignore
 
 @strawberry.type
 class Mutation:
@@ -285,7 +285,101 @@ class Mutation:
         """, [nombre, stock, precio, categoria_id, imagen, talla, genero])
             ropa_id = conn.fetchone()[0]
             return RopaType(id= ropa_id, nombre=nombre, stock=stock, precio=precio, categoria_id=categoria_id, imagen=imagen, talla=talla, genero=genero)
-        
+    
+    @strawberry.mutation
+    def crear_pedido(
+        self, info: strawberry.Info, datos: list[ItemInput]
+    ) -> list[PedidoType]:
+        usuario = requerir_usuario(info)
+        try:
+            usuario_id = int(usuario["usuario_id"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise Exception("Usuario inválido") from error
+        if usuario_id <= 0:
+            raise Exception("Usuario inválido")
+        if not datos:
+            raise Exception("El pedido debe incluir al menos un producto")
+
+        cantidades: dict[int, int] = {}
+        for item in datos:
+            try:
+                producto_id = int(item.producto_id)
+            except (TypeError, ValueError) as error:
+                raise Exception("El ID del producto no es válido") from error
+            if producto_id <= 0:
+                raise Exception("El ID del producto no es válido")
+            if item.cantidad <= 0:
+                raise Exception("La cantidad debe ser mayor que cero")
+            cantidades[producto_id] = cantidades.get(producto_id, 0) + item.cantidad
+
+        pedidos: list[PedidoType] = []
+        with transaction.atomic():
+            with connection.cursor() as conn:
+                producto_ids = sorted(cantidades)
+                placeholders = ", ".join(["%s"] * len(producto_ids))
+                conn.execute(
+                    f"""
+                    SELECT id, precio, stock
+                    FROM productos
+                    WHERE id IN ({placeholders})
+                    ORDER BY id
+                    FOR UPDATE
+                    """,
+                    producto_ids,
+                )
+                productos = {
+                    row[0]: {"precio": row[1], "stock": row[2]}
+                    for row in conn.fetchall()
+                }
+                faltantes = set(producto_ids) - productos.keys()
+                if faltantes:
+                    raise Exception(
+                        f"Producto(s) no encontrado(s): {', '.join(map(str, sorted(faltantes)))}"
+                    )
+
+                for producto_id in producto_ids:
+                    cantidad = cantidades[producto_id]
+                    producto = productos[producto_id]
+                    if producto["precio"] is None or producto["stock"] is None:
+                        raise Exception("Producto no disponible")
+                    if producto["stock"] < cantidad:
+                        raise Exception(
+                            f"Stock insuficiente para el producto {producto_id}"
+                        )
+
+                    conn.execute(
+                        "UPDATE productos SET stock = stock - %s WHERE id = %s",
+                        [cantidad, producto_id],
+                    )
+                    precio_total = producto["precio"] * cantidad
+                    creado_en = datetime.now(timezone.utc)
+                    conn.execute(
+                        """
+                        INSERT INTO pedidos
+                            (id_usuario, id_producto, cantidad, "precioTotal", created_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        [usuario_id,producto_id,cantidad,precio_total,creado_en,
+                        ],
+                    )
+                    pedido_id = conn.fetchone()[0]
+                    pedidos.append(
+                        cast(
+                            PedidoType,
+                            models.Pedido(
+                                id=pedido_id,
+                                usuario_id=usuario_id,
+                                producto_id=producto_id,
+                                cantidad=cantidad,
+                                precio_total=precio_total,
+                                created_at=creado_en,
+                            ),
+                        )
+                    )
+
+        return pedidos
+    
     @strawberry.mutation
     def login(self, input: LoginInput) -> AuthPayload:
         with transaction.atomic():
@@ -309,7 +403,7 @@ class Mutation:
     @strawberry.mutation
     def crear_usuario(self, input:UsuarioInput) -> Optional[Usuario]:
         try:
-            email_info = validate_email(input.email, check_deliverability=True)
+            email_info = validate_email(input.email, check_deliverability=False)
             normalized_email = email_info.normalized
         except EmailNotValidError as e:
             raise Exception(f"Correo invalido: {e}")
@@ -322,8 +416,16 @@ class Mutation:
                 """, [input.nombre, normalized_email, password, "CLIENTE"])
                 usuario = conn.fetchone()
                 cols = [c[0] for c in conn.description]
-            except asyncpg.UniqueViolationError:
-                raise Exception("Este correo ya se encuentra registrado")
+            except IntegrityError as error:
+                cause = error.__cause__
+                if (
+                    getattr(cause, "sqlstate", None) == "23505"
+                    or getattr(cause, "pgcode", None) == "23505"
+                ):
+                    raise Exception(
+                        "Este correo ya se encuentra registrado"
+                    ) from error
+                raise
             return Usuario(**{**dict(zip(cols, usuario)), "rol": RolEnum(usuario[3])}) if usuario else None
     @strawberry.mutation
     def refrescar_token(self, refresh_token:str) -> RefreshPayload:

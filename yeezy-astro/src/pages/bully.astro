@@ -2,9 +2,6 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav.jsx';
 import ProductGrid from '../components/ProductGrid.jsx';
-import { getDiscos } from '../lib/api.js';
-
-const discos = await getDiscos();
 ---
 <Layout title="BULLY">
   <Nav client:load activa="bully" />
@@ -12,5 +9,5 @@ const discos = await getDiscos();
     <h1>BULLY</h1>
     <p>03.27.2026</p>
   </section>
-  <ProductGrid productos={discos} />
+  <ProductGrid tipo="discos" client:load />
 </Layout>

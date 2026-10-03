@@ -1,41 +1,30 @@
 import { useState } from 'react';
 import ProductGrid from './ProductGrid.jsx';
 
-const categorias = [
-  { clave: 'destacado', titulo: 'FEATURED' },
-  { clave: 'calzado', titulo: 'FOOTWEAR' },
-  { clave: 'top', titulo: 'TOP' },
-  { clave: 'bottom', titulo: 'BOTTOMS' },
-  { clave: 'under', titulo: 'UNDERWEAR' },
-  { clave: 'accesorio', titulo: 'ACCESORIES' },
-  { clave: 'all', titulo: 'ALL' },
+const catalogos = [
+  { tipo: 'ropa', titulo: 'MERCH' },
+  { tipo: 'discos', titulo: 'BULLY' },
 ];
 
-export default function CategoriasShop({ productos }) {
-    const [activa, setActiva] = useState('all');
-  
-    const items = activa === 'all'
-      ? productos
-      : activa === 'destacado'
-        ? productos.filter(p => p.destacado)
-        : productos.filter(p => p.seccion === activa);
+export default function CategoriasShop() {
+  const [tipo, setTipo] = useState('ropa');
 
   return (
     <>
       <div className="encabezado">
         <div className="toggle">
-          {categorias.map(c => (
+          {catalogos.map((catalogo) => (
             <button
-              key={c.clave}
-              className={activa === c.clave ? 'activo' : ''}
-              onClick={() => setActiva(c.clave)}
+              key={catalogo.tipo}
+              className={tipo === catalogo.tipo ? 'activo' : ''}
+              onClick={() => setTipo(catalogo.tipo)}
             >
-              {c.titulo}
+              {catalogo.titulo}
             </button>
           ))}
         </div>
       </div>
-      <ProductGrid productos={items} />
+      <ProductGrid key={tipo} tipo={tipo} />
     </>
   );
 }

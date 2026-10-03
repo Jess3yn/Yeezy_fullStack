@@ -1,10 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav.jsx';
+import Cart from '../components/Cart.jsx';
 ---
 <Layout title="CART">
   <Nav client:load activa="carrito" />
-  <section class="lista">
-    <p style="color:#bbb; text-align:center; padding:60px 0; font-size:12px; letter-spacing:1px;">CART IS EMPTY</p>
-  </section>
+  <Cart client:load />
 </Layout>
