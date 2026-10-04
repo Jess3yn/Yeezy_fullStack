@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+config/.env
+venv/
+node_modules/
+*.pem
+config/staticfiles/
+.DS_Store
+.astro/
+dist/
