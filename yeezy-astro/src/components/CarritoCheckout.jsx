@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getAccessToken } from '../lib/auth.js';
+import { clearAuth, getAccessToken } from '../lib/auth.js';
 import { crearPedido, getMisPedidos} from '../lib/api.js';
-import { clearCart,
-  getCart,
+import { clearCart, getCart,
   removeFromCart,
   subscribeToCart,
   updateCartQuantity,
@@ -17,6 +16,7 @@ function displayDate(value) {
 
 export default function CarritoCheckout() {
   const [cart, setCart] = useState([]);
+
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -26,8 +26,9 @@ export default function CarritoCheckout() {
 
   useEffect(() => {
     setCart(getCart());
-    return subscribeToCart(setCart);
-  }, []);
+    return subscribeToCart(setCart);}, []);
+
+
 
   useEffect(() => {
     let cancelled = false;
@@ -38,8 +39,7 @@ export default function CarritoCheckout() {
       setLoadingOrders(false);
       return () => {
         cancelled = true;
-      };
-    }
+      }; }
 
     getMisPedidos()
       .then((items) => {
@@ -97,23 +97,22 @@ export default function CarritoCheckout() {
       const created = await crearPedido(cart);
       clearCart();
       setCart([]);
+      const history = await getMisPedidos();
+      setOrders(history);
       setMessage(`Pedido confirmado. Se crearon ${created.length} registros de producto.`);
-      try {
-        const history = await getMisPedidos();
-        setOrders(history);
-      } catch (cause) {
-        setError(
-          cause instanceof Error
-            ? `El pedido se creó, pero no se pudo actualizar el historial: ${cause.message}`
-            : 'El pedido se creó, pero no se pudo actualizar el historial.',
-        );
-      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo confirmar el pedido.');
       setAuthenticated(Boolean(getAccessToken()));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function logout() {
+    clearAuth();
+    setAuthenticated(false);
+    setOrders([]);
+    setError('Sesión cerrada.');
   }
 
   return (
@@ -179,6 +178,11 @@ export default function CarritoCheckout() {
       <section className="order-history" aria-labelledby="order-history-title">
         <div className="order-heading">
           <h2 className="form-titulo" id="order-history-title">TUS PEDIDOS</h2>
+          {authenticated && (
+            <button className="cart-remove" type="button" onClick={logout}>
+              Cerrar sesión
+            </button>
+          )}
         </div>
         {loadingOrders && <p className="form-msg" role="status">Cargando pedidos...</p>}
         {!loadingOrders && authenticated && orders.length === 0 && (
