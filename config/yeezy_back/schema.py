@@ -572,7 +572,7 @@ class Mutation:
                 raise Exception("Invalid Credentials")
             access_token = generar_access_token({"usuario_id" : usuario[0], "email": usuario[1],"rol": usuario[3]})
             refresh_token, jti = generar_refresh_token({"usuario_id" : usuario[0], " email": usuario[1], "rol": usuario[3]})
-            expires = datetime.now(timezone.utc) + timedelta(days=7)
+            expires = datetime.now(timezone.utc) + timedelta(minutes=30)
             conn.execute(
                 """
                 INSERT INTO refresh_tokens (usuario_id, jti, expires_at) VALUES  (%s,%s,%s)
