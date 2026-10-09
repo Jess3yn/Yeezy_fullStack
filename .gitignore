@@ -9,3 +9,4 @@ config/staticfiles/
 .DS_Store
 .astro/
 dist/
+*.zip
