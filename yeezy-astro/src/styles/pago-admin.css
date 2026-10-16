@@ -1,0 +1,37 @@
+.pago-form { display: flex; flex-direction: column; gap: 14px; max-width: 360px; margin: 24px 0 0 auto; }
+.pago-form input, .pago-form select, .campo-mp {
+  border: none;
+  border-bottom: 1px solid #ddd;
+  padding: 8px 0;
+  height: 36px;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+  outline: none;
+}
+.pago-fila { display: flex; gap: 16px; }
+.pago-fila .campo-mp { flex: 1; }
+.pago-form .cart-checkout { margin-top: 8px; }
+
+.admin-page { max-width: 1000px; margin: 0 auto; padding: 48px 24px 80px; }
+.admin-page > .form-titulo { text-align: center; margin-bottom: 16px; }
+.admin-tarjetas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+.admin-tarjeta { border: 1px solid #eee; padding: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 10px; letter-spacing: 1px; color: #999; }
+.admin-tarjeta strong { font-size: 16px; color: #111; font-weight: 600; }
+.admin-barras { display: flex; align-items: flex-end; gap: 8px; height: 200px; padding: 20px 0 0; }
+.admin-barra { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.admin-barra-col { width: 100%; background: #111; min-height: 2px; }
+.admin-barra-valor, .admin-barra-dia { font-size: 9px; color: #999; }
+.admin-tabla-wrap { overflow-x: auto; }
+.admin-tabla { width: 100%; border-collapse: collapse; font-size: 11px; }
+.admin-tabla th { text-align: left; font-weight: 400; color: #999; letter-spacing: 1px; padding: 8px 6px; border-bottom: 1px solid #111; }
+.admin-tabla td { padding: 8px 6px; border-bottom: 1px solid #eee; }
+.admin-tabla input { width: 100%; min-width: 70px; border: none; border-bottom: 1px solid #ddd; font: inherit; padding: 4px 0; }
+.admin-acciones { white-space: nowrap; }
+.admin-acciones button { border: 0; background: none; font: inherit; font-size: 10px; cursor: pointer; margin-right: 10px; }
+.admin-acciones button:last-child { color: #8c1d18; }
+.admin-form { max-width: 360px; margin: 0 auto; }
+.admin-form select { border: none; border-bottom: 1px solid #ddd; padding: 8px 0; font: inherit; font-size: 12px; background: #fff; }
+@media (max-width: 700px) {
+  .admin-tarjetas { grid-template-columns: repeat(2, 1fr); }
+}

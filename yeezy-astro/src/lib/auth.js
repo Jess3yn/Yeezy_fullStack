@@ -47,7 +47,7 @@ async function graphqlRequest(query, variables, accessToken) {
     throw new Error('Mala Respuesta');}
   if (!response.ok || result.errors?.length) {
     const message = result.errors?.map((error) => error.message).join(' ') ||
-      "El backend responde:  ${response.status}";
+      `El backend responde: ${response.status}`;
     throw new Error(message);
   }
   return result.data;

@@ -1,0 +1,9 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.jsx';
+import AdminPanel from '../components/AdminPanel.jsx';
+---
+<Layout title="ADMIN">
+  <Nav client:load activa="admin" />
+  <AdminPanel client:load />
+</Layout>

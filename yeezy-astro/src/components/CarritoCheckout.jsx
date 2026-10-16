@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { clearAuth, getAccessToken } from '../lib/auth.js';
-import { crearPedido, getMisPedidos} from '../lib/api.js';
+import { pagarPedido, getMisPedidos } from '../lib/api.js';
+import PagoMercadoPago from './PagoMercadoPago.jsx';
 import { clearCart, getCart,
   removeFromCart,
   subscribeToCart,
@@ -79,7 +80,7 @@ export default function CarritoCheckout() {
     setCart(getCart());
   }
 
-  async function checkout() {
+  async function pagar(datosPago) {
     setError('');
     setMessage('');
     if (cart.length === 0) {
@@ -88,20 +89,23 @@ export default function CarritoCheckout() {
     }
     if (!getAccessToken()) {
       setAuthenticated(false);
-      setError('Inicia sesión para confirmar tu pedido.');
+      setError('Inicia sesión para pagar.');
       return;
     }
 
     setSubmitting(true);
     try {
-      const created = await crearPedido(cart);
+      const pago = await pagarPedido(cart, datosPago);
       clearCart();
       setCart([]);
-      const history = await getMisPedidos();
-      setOrders(history);
-      setMessage(`Pedido confirmado. Se crearon ${created.length} registros de producto.`);
+      setMessage(`Pago aprobado. Número de pago: ${pago.pagoId}`);
+      try {
+        setOrders(await getMisPedidos());
+      } catch {
+        setError('El pago se hizo, pero no se pudo actualizar el historial.');
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo confirmar el pedido.');
+      setError(cause instanceof Error ? cause.message : 'No se pudo procesar el pago.');
       setAuthenticated(Boolean(getAccessToken()));
     } finally {
       setSubmitting(false);
@@ -163,14 +167,9 @@ export default function CarritoCheckout() {
               <span>Total</span>
               <strong>{money(total)}</strong>
             </div>
-            <button
-              className="cart-checkout"
-              type="button"
-              onClick={checkout}
-              disabled={submitting}
-            >
-              {submitting ? 'PROCESANDO...' : 'CONFIRMAR PEDIDO'}
-            </button>
+            {authenticated
+              ? <PagoMercadoPago total={total} procesando={submitting} onPagar={pagar} onError={setError} />
+              : <p className="form-msg"><a href="/login">Inicia sesión</a> para pagar.</p>}
           </>
         )}
       </section>

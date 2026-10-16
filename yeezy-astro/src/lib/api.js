@@ -102,30 +102,41 @@ export async function getDiscos() {
   }));
 }
 
-export async function crearPedido(items) {
+export async function pagarPedido(items, pago) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error('El carrito está vacío.');
   }
 
   const data = await authenticatedGraphqlRequest(
-    `mutation CrearPedido($datos: [ItemInput!]!) {
-      crearPedido(datos: $datos) {
-        id
+    `mutation PagarPedido($input: PagoInput!) {
+      pagarPedido(input: $input) {
+        pagoId
+        estado
+        total
       }
     }`,
     {
-      datos: items.map((item) => ({
-        productoId: String(item.productoId),
-        cantidad: Number(item.cantidad),
-      })),
+      input: {
+        datos: items.map((item) => ({
+          productoId: String(item.productoId),
+          cantidad: Number(item.cantidad),
+        })),
+        token: pago.token,
+        metodoPago: pago.metodoPago,
+        correo: pago.correo,
+        emisor: pago.emisor ? String(pago.emisor) : null,
+        cuotas: Number(pago.cuotas) || 1,
+        docTipo: pago.docTipo || null,
+        docNumero: pago.docNumero || null,
+      },
     },
   );
 
-  if (!Array.isArray(data?.crearPedido)) {
-    throw new Error('El backend no confirmó la creación del pedido.');
+  if (!data?.pagarPedido) {
+    throw new Error('El backend no confirmó el pago.');
   }
 
-  return data.crearPedido;
+  return data.pagarPedido;
 }
 
 export async function getMisPedidos() {

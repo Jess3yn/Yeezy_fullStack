@@ -1,4 +1,13 @@
+import { useEffect, useState } from 'react';
+import { getCurrentUser } from '../lib/auth.js';
+
 export default function Nav({ activa }) {
+  const [admin, setAdmin] = useState(false);
+
+  useEffect(() => {
+    setAdmin(getCurrentUser()?.rol === 'ADMIN');
+  }, []);
+
   return (
     <header className="nav">
       <div className="nav-top">
@@ -7,6 +16,7 @@ export default function Nav({ activa }) {
           <a className={activa === 'bully' ? 'activo' : ''} href="/bully">BULLY</a>
           <a className={activa === 'tour' ? 'activo' : ''} href="/tour">TOUR</a>
           <a className={activa === 'merch' ? 'activo' : ''} href="/merch">MERCH</a>
+          {admin && <a className={activa === 'admin' ? 'activo' : ''} href="/admin">ADMIN</a>}
         </nav>
         <div className="iconos">
   <a className="cuenta" href="/login">

@@ -10,6 +10,7 @@ from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
 from datetime import datetime, timedelta, timezone
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
+from yeezy_back.mercadopago_service import crear_pago
 
 
 
@@ -189,6 +190,77 @@ class PedidoHistorialType:
     precio_total: Decimal
     created_at: datetime
 
+@strawberry.input
+class PagoInput:
+    datos: list[ItemInput]
+    token: str
+    metodo_pago: str
+    correo: str
+    emisor: str | None = None
+    cuotas: int = 1
+    doc_tipo: str | None = None
+    doc_numero: str | None = None
+
+
+@strawberry.type
+class PagoPayload:
+    pago_id: str
+    estado: str
+    total: Decimal
+
+
+@strawberry.type
+class AdminResumen:
+    ventas_totales: Decimal
+    total_pedidos: int
+    total_usuarios: int
+    total_productos: int
+    sin_stock: int
+
+
+@strawberry.type
+class AdminVentaDia:
+    dia: str
+    total: Decimal
+
+
+@strawberry.type
+class AdminPedido:
+    id: strawberry.ID
+    usuario_email: str | None
+    producto_nombre: str | None
+    cantidad: int
+    precio_total: Decimal
+    created_at: datetime
+    pago_id: str | None
+
+
+@strawberry.type
+class AdminProducto:
+    id: strawberry.ID
+    tipo: str
+    nombre: str
+    categoria: str | None
+    stock: int
+    precio: Decimal
+    imagen: str | None
+
+
+@strawberry.type
+class AdminUsuario:
+    id: strawberry.ID
+    nombre: str
+    email: str
+    rol: str
+
+
+def consultar(sql, params=None):
+    with connection.cursor() as conn:
+        conn.execute(sql, params or [])
+        cols = [c[0] for c in conn.description]
+        return [dict(zip(cols, fila)) for fila in conn.fetchall()]
+
+
 # @strawberry.input
 # class ProductoInput:
 #     nombre: str
@@ -266,6 +338,61 @@ class Query:
                 PedidoHistorialType(**dict(zip(columnas, row)))
                 for row in conn.fetchall()
             ]
+
+    @strawberry.field
+    def admin_resumen(self, info: strawberry.Info) -> AdminResumen:
+        requerir_admin(info)
+        fila = consultar("""
+            SELECT
+                (SELECT COALESCE(SUM("precioTotal"), 0) FROM pedidos) AS ventas_totales,
+                (SELECT COUNT(*) FROM pedidos) AS total_pedidos,
+                (SELECT COUNT(*) FROM usuarios) AS total_usuarios,
+                (SELECT COUNT(*) FROM productos) AS total_productos,
+                (SELECT COUNT(*) FROM productos WHERE stock = 0) AS sin_stock
+        """)[0]
+        return AdminResumen(**fila)
+
+    @strawberry.field
+    def admin_ventas_por_dia(self, info: strawberry.Info) -> list[AdminVentaDia]:
+        requerir_admin(info)
+        filas = consultar("""
+            SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS dia, SUM("precioTotal") AS total
+            FROM pedidos
+            WHERE created_at >= NOW() - INTERVAL '14 days'
+            GROUP BY dia
+            ORDER BY dia
+        """)
+        return [AdminVentaDia(**f) for f in filas]
+
+    @strawberry.field
+    def admin_pedidos(self, info: strawberry.Info) -> list[AdminPedido]:
+        requerir_admin(info)
+        filas = consultar("""
+            SELECT pe.id, u.email AS usuario_email, p.nombre AS producto_nombre,
+                   pe.cantidad, pe."precioTotal" AS precio_total, pe.created_at, pe.pago_id
+            FROM pedidos pe
+            LEFT JOIN usuarios u ON u.id = pe.id_usuario
+            LEFT JOIN productos p ON p.id = pe.id_producto
+            ORDER BY pe.created_at DESC, pe.id DESC
+        """)
+        return [AdminPedido(**f) for f in filas]
+
+    @strawberry.field
+    def admin_productos(self, info: strawberry.Info) -> list[AdminProducto]:
+        requerir_admin(info)
+        filas = consultar("""
+            SELECT p.id, p.tipo, p.nombre, c.nombre AS categoria, p.stock, p.precio, p.imagen
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            ORDER BY p.id
+        """)
+        return [AdminProducto(**f) for f in filas]
+
+    @strawberry.field
+    def admin_usuarios(self, info: strawberry.Info) -> list[AdminUsuario]:
+        requerir_admin(info)
+        filas = consultar("SELECT id, nombre, email, rol FROM usuarios ORDER BY id")
+        return [AdminUsuario(**f) for f in filas]
 
 @strawberry.type
 class Mutation:
@@ -463,99 +590,120 @@ class Mutation:
         )
     
     @strawberry.mutation
-    def crear_pedido(
-        self, info: strawberry.Info, datos: list[ItemInput]
-    ) -> list[PedidoType]:
+    def pagar_pedido(self, info: strawberry.Info, input: PagoInput) -> PagoPayload:
         usuario = requerir_usuario(info)
         try:
             usuario_id = int(usuario["usuario_id"])
         except (KeyError, TypeError, ValueError) as error:
             raise Exception("Usuario inválido") from error
-        if usuario_id <= 0:
-            raise Exception("Usuario inválido")
-        if not datos:
+        if not input.datos:
             raise Exception("El pedido debe incluir al menos un producto")
 
         cantidades: dict[int, int] = {}
-        for item in datos:
+        for item in input.datos:
             try:
                 producto_id = int(item.producto_id)
             except (TypeError, ValueError) as error:
                 raise Exception("El ID del producto no es válido") from error
-            if producto_id <= 0:
-                raise Exception("El ID del producto no es válido")
-            if item.cantidad <= 0:
-                raise Exception("La cantidad debe ser mayor que cero")
+            if producto_id <= 0 or item.cantidad <= 0:
+                raise Exception("Producto o cantidad no válidos")
             cantidades[producto_id] = cantidades.get(producto_id, 0) + item.cantidad
 
-        pedidos: list[PedidoType] = []
         with transaction.atomic():
             with connection.cursor() as conn:
-                producto_ids = sorted(cantidades)
-                placeholders = ", ".join(["%s"] * len(producto_ids))
+                ids = sorted(cantidades)
+                marcas = ", ".join(["%s"] * len(ids))
                 conn.execute(
                     f"""
                     SELECT id, precio, stock
                     FROM productos
-                    WHERE id IN ({placeholders})
+                    WHERE id IN ({marcas})
                     ORDER BY id
                     FOR UPDATE
                     """,
-                    producto_ids,
+                    ids,
                 )
-                productos = {
-                    row[0]: {"precio": row[1], "stock": row[2]}
-                    for row in conn.fetchall()
-                }
-                faltantes = set(producto_ids) - productos.keys()
+                productos = {fila[0]: {"precio": fila[1], "stock": fila[2]} for fila in conn.fetchall()}
+                faltantes = set(ids) - productos.keys()
                 if faltantes:
-                    raise Exception(
-                        f"Producto(s) no encontrado(s): {', '.join(map(str, sorted(faltantes)))}"
-                    )
+                    raise Exception("Producto(s) no encontrado(s): " + ", ".join(map(str, sorted(faltantes))))
 
-                for producto_id in producto_ids:
-                    cantidad = cantidades[producto_id]
+                total = Decimal("0")
+                for producto_id in ids:
                     producto = productos[producto_id]
                     if producto["precio"] is None or producto["stock"] is None:
                         raise Exception("Producto no disponible")
-                    if producto["stock"] < cantidad:
-                        raise Exception(
-                            f"Stock insuficiente para el producto {producto_id}"
-                        )
+                    if producto["stock"] < cantidades[producto_id]:
+                        raise Exception(f"Stock insuficiente para el producto {producto_id}")
+                    total += producto["precio"] * cantidades[producto_id]
 
+                pago = crear_pago(
+                    total,
+                    input.token,
+                    input.metodo_pago,
+                    input.emisor,
+                    input.cuotas,
+                    input.correo,
+                    f"Pedido Yeezy usuario {usuario_id}",
+                    input.doc_tipo,
+                    input.doc_numero,
+                )
+                pago_id = str(pago["id"])
+
+                for producto_id in ids:
+                    cantidad = cantidades[producto_id]
                     conn.execute(
                         "UPDATE productos SET stock = stock - %s WHERE id = %s",
                         [cantidad, producto_id],
                     )
-                    precio_total = producto["precio"] * cantidad
-                    creado_en = datetime.now(timezone.utc)
                     conn.execute(
                         """
-                        INSERT INTO pedidos
-                            (id_usuario, id_producto, cantidad, "precioTotal", created_at)
-                        VALUES (%s, %s, %s, %s, %s)
-                        RETURNING id
+                        INSERT INTO pedidos (id_usuario, id_producto, cantidad, "precioTotal", created_at, pago_id)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         """,
-                        [usuario_id,producto_id,cantidad,precio_total,creado_en,
+                        [
+                            usuario_id,
+                            producto_id,
+                            cantidad,
+                            productos[producto_id]["precio"] * cantidad,
+                            datetime.now(timezone.utc),
+                            pago_id,
                         ],
                     )
-                    pedido_id = conn.fetchone()[0]
-                    pedidos.append(
-                        cast(
-                            PedidoType,
-                            models.Pedido(
-                                id=pedido_id,
-                                usuario_id=usuario_id,
-                                producto_id=producto_id,
-                                cantidad=cantidad,
-                                precio_total=precio_total,
-                                created_at=creado_en,
-                            ),
-                        )
-                    )
 
-        return pedidos
-    
+        return PagoPayload(pago_id=pago_id, estado=pago["status"], total=total)
+
+    @strawberry.mutation
+    def actualizar_producto(
+        self, info: strawberry.Info, id: strawberry.ID, nombre: str, precio: Decimal, stock: int
+    ) -> bool:
+        requerir_admin(info)
+        if not nombre.strip():
+            raise Exception("El nombre es obligatorio")
+        if precio < 0 or stock < 0:
+            raise Exception("El precio y el stock no pueden ser negativos")
+        with connection.cursor() as conn:
+            conn.execute(
+                "UPDATE productos SET nombre = %s, precio = %s, stock = %s WHERE id = %s",
+                [nombre.strip(), precio, stock, int(id)],
+            )
+            if conn.rowcount == 0:
+                raise Exception("El producto no existe")
+        return True
+
+    @strawberry.mutation
+    def eliminar_producto(self, info: strawberry.Info, id: strawberry.ID) -> bool:
+        requerir_admin(info)
+        try:
+            with transaction.atomic():
+                with connection.cursor() as conn:
+                    conn.execute("DELETE FROM ropa WHERE producto_id = %s", [int(id)])
+                    conn.execute("DELETE FROM discos WHERE producto_id = %s", [int(id)])
+                    conn.execute("DELETE FROM productos WHERE id = %s", [int(id)])
+        except IntegrityError as error:
+            raise Exception("No se puede eliminar, el producto ya tiene pedidos") from error
+        return True
+
     @strawberry.mutation
     def login(self, input: LoginInput) -> AuthPayload:
         with transaction.atomic():
@@ -657,13 +805,13 @@ class Mutation:
         
         jti = payload["jti"]
         with connection.cursor() as conn:
-            conn.exe("""
+            conn.execute("""
             SELECT * FROM refresh_tokens WHERE jti = %s
             """,  [jti])
             refresh = conn.fetchone()
             if refresh is None:
                 raise Exception("Refresh Token Inválido")
-            conn.execute("UPDATE refresh_tokens SET usado = TRUE WHERE jti = %s", jti)
+            conn.execute("UPDATE refresh_tokens SET usado = TRUE WHERE jti = %s", [jti])
         return True
     
     # @strawberry.mutation()
