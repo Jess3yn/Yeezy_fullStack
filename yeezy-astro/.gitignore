@@ -13,3 +13,5 @@ config/db.sqlite3
 
 # Editor / SO
 .DS_Store
+
+pnpm-lock.yaml

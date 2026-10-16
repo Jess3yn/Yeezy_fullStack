@@ -10,7 +10,7 @@ export default function ProductGrid({ productos, tipo }) {
   function agregarAlCarrito(producto) {
     try {
       addToCart(producto, tipo);
-      setAviso({ texto: `${producto.nombre} añadido al carrito.`, error: false });
+      setAviso({ texto: `${producto.nombre} añadido al carrito`, error: false });
     } catch (error) {
       setAviso({
         texto: error instanceof Error ? error.message : 'No se pudo añadir al carrito.',
