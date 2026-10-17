@@ -1,1 +1,0 @@
-ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_id text;
