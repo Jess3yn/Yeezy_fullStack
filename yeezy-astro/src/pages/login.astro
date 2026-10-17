@@ -38,7 +38,7 @@ import Nav from '../components/Nav.jsx';
       try {
         const auth = await login({ email, password });
         msg.textContent = 'Sesión iniciada correctamente.';
-        window.location.href = auth.usuario.rol === 'ADMIN' ? '/admin' : '/';
+        window.location.href = auth.usuario.rol === 'ADMIN' ? '/admin' : '/';  
       } catch (error) {
         msg.textContent = error instanceof Error
           ? error.message
