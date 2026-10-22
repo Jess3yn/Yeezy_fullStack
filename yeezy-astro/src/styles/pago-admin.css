@@ -26,7 +26,7 @@
 .admin-tabla { width: 100%; border-collapse: collapse; font-size: 11px; }
 .admin-tabla th { text-align: left; font-weight: 400; color: #999; letter-spacing: 1px; padding: 8px 6px; border-bottom: 1px solid #111; }
 .admin-tabla td { padding: 8px 6px; border-bottom: 1px solid #eee; }
-.admin-tabla input { width: 100%; min-width: 70px; border: none; border-bottom: 1px solid #ddd; font: inherit; padding: 4px 0; }
+.admin-tabla input, .admin-tabla select { width: 100%; min-width: 70px; border: none; border-bottom: 1px solid #ddd; font: inherit; padding: 4px 0; background: #fff; }
 .admin-acciones { white-space: nowrap; }
 .admin-acciones button { border: 0; background: none; font: inherit; font-size: 10px; cursor: pointer; margin-right: 10px; }
 .admin-acciones button:last-child { color: #8c1d18; }

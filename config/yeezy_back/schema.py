@@ -241,6 +241,7 @@ class AdminProducto:
     tipo: str
     nombre: str
     categoria: str | None
+    categoria_id: int | None
     stock: int
     precio: Decimal
     imagen: str | None
@@ -381,7 +382,8 @@ class Query:
     def admin_productos(self, info: strawberry.Info) -> list[AdminProducto]:
         requerir_admin(info)
         filas = consultar("""
-            SELECT p.id, p.tipo, p.nombre, c.nombre AS categoria, p.stock, p.precio, p.imagen
+            SELECT p.id, p.tipo, p.nombre, c.nombre AS categoria,
+                   p.categoria_id AS categoria_id, p.stock, p.precio, p.imagen
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
             ORDER BY p.id
@@ -403,6 +405,8 @@ class Mutation:
     ) -> CategoriaType:
         requerir_admin(info)
         nombre = input.nombre.strip()
+        if not nombre:
+            raise Exception("El nombre de la categoría es obligatorio")
         with transaction.atomic():
             with connection.cursor() as conn:
                 conn.execute("SELECT pg_advisory_xact_lock(74839201)")
@@ -430,6 +434,60 @@ class Mutation:
                 )
                 categoria = conn.fetchone()
         return CategoriaType(id=categoria[0], nombre=categoria[1])
+
+    @strawberry.mutation
+    def renombrar_categoria(
+        self, info: strawberry.Info, id: strawberry.ID, nombre: str
+    ) -> bool:
+        requerir_admin(info)
+        nombre_limpio = nombre.strip()
+        if not nombre_limpio:
+            raise Exception("El nombre de la categoría es obligatorio")
+
+        with connection.cursor() as conn:
+            conn.execute(
+                """
+                SELECT 1 FROM categorias
+                WHERE LOWER(BTRIM(nombre)) = LOWER(%s) AND id <> %s
+                LIMIT 1
+                """,
+                [nombre_limpio, int(id)],
+            )
+            if conn.fetchone() is not None:
+                raise Exception("Ya existe una categoría con ese nombre")
+            conn.execute(
+                "UPDATE categorias SET nombre = %s WHERE id = %s",
+                [nombre_limpio, int(id)],
+            )
+            if conn.rowcount == 0:
+                raise Exception("La categoría no existe")
+        return True
+
+    @strawberry.mutation
+    def eliminar_categoria(
+        self, info: strawberry.Info, id: strawberry.ID
+    ) -> bool:
+        requerir_admin(info)
+        try:
+            with transaction.atomic():
+                with connection.cursor() as conn:
+                    conn.execute("SELECT 1 FROM categorias WHERE id = %s", [int(id)])
+                    if conn.fetchone() is None:
+                        raise Exception("La categoría no existe")
+                    conn.execute(
+                        "SELECT 1 FROM productos WHERE categoria_id = %s LIMIT 1",
+                        [int(id)],
+                    )
+                    if conn.fetchone() is not None:
+                        raise Exception(
+                            "No se puede eliminar: hay productos asignados a esta categoría"
+                        )
+                    conn.execute("DELETE FROM categorias WHERE id = %s", [int(id)])
+        except IntegrityError as error:
+            raise Exception(
+                "No se puede eliminar la categoría porque está siendo utilizada"
+            ) from error
+        return True
 
     @strawberry.mutation
     def crear_disco(
@@ -675,7 +733,8 @@ class Mutation:
 
     @strawberry.mutation
     def actualizar_producto(
-        self, info: strawberry.Info, id: strawberry.ID, nombre: str, precio: Decimal, stock: int
+        self, info: strawberry.Info, id: strawberry.ID, nombre: str, precio: Decimal,
+        stock: int, categoria_id: int | None = None
     ) -> bool:
         requerir_admin(info)
         if not nombre.strip():
@@ -683,10 +742,26 @@ class Mutation:
         if precio < 0 or stock < 0:
             raise Exception("El precio y el stock no pueden ser negativos")
         with connection.cursor() as conn:
-            conn.execute(
-                "UPDATE productos SET nombre = %s, precio = %s, stock = %s WHERE id = %s",
-                [nombre.strip(), precio, stock, int(id)],
-            )
+            if categoria_id is None:
+                conn.execute(
+                    """
+                    UPDATE productos SET nombre = %s, precio = %s, stock = %s
+                    WHERE id = %s
+                    """,
+                    [nombre.strip(), precio, stock, int(id)],
+                )
+            else:
+                conn.execute("SELECT 1 FROM categorias WHERE id = %s", [categoria_id])
+                if conn.fetchone() is None:
+                    raise Exception("La categoría no existe")
+                conn.execute(
+                    """
+                    UPDATE productos
+                    SET nombre = %s, precio = %s, stock = %s, categoria_id = %s
+                    WHERE id = %s
+                    """,
+                    [nombre.strip(), precio, stock, categoria_id, int(id)],
+                )
             if conn.rowcount == 0:
                 raise Exception("El producto no existe")
         return True

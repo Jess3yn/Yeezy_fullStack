@@ -4,6 +4,9 @@ import {
   getPanel,
   actualizarProducto,
   eliminarProducto,
+  crearCategoria,
+  renombrarCategoria,
+  eliminarCategoria,
   crearRopa,
   crearDisco,
 } from '../lib/admin.js';
@@ -17,6 +20,8 @@ const pestanas = [
   { clave: 'pedidos', titulo: 'PEDIDOS' },
   { clave: 'productos', titulo: 'PRODUCTOS' },
   { clave: 'usuarios', titulo: 'USUARIOS' },
+  { clave: 'categorias', titulo: 'CATEGORIAS' },
+
 ];
 
 const productoVacio = {
@@ -40,6 +45,13 @@ export default function AdminPanel() {
   const [pestana, setPestana] = useState('resumen');
   const [productos, setProductos] = useState([]);
   const [nuevo, setNuevo] = useState(productoVacio);
+  
+  const [nombreCategoria, setNombreCategoria] = useState('');
+  const [nombresCategorias, setNombresCategorias] = useState({});
+
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false);
+  const [categoriaEnProceso, setCategoriaEnProceso] = useState(null);
+  const [guardandoProductoId, setGuardandoProductoId] = useState(null);
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => {
@@ -67,12 +79,15 @@ export default function AdminPanel() {
 
   async function guardar(producto) {
     setMensaje('');
+    setGuardandoProductoId(producto.id);
     try {
       await actualizarProducto(producto);
       setMensaje('Producto actualizado.');
-      cargar();
+      await cargar();
     } catch (error) {
       setMensaje(error.message);
+    } finally {
+      setGuardandoProductoId(null);
     }
   }
 
@@ -99,6 +114,76 @@ export default function AdminPanel() {
       cargar();
     } catch (error) {
       setMensaje(error.message);
+    }
+  }
+
+  async function agregarCategoria(evento) {
+    evento.preventDefault();
+    setMensaje('');
+    setGuardandoCategoria(true);
+    try {
+      const categoria = await crearCategoria(nombreCategoria);
+      const yaExistia = panel.categorias.some(
+        (existente) => String(existente.id) === String(categoria.id),
+      );
+      setPanel((actual) => ({
+        ...actual,
+        categorias: [...actual.categorias.filter(
+          (existente) => String(existente.id) !== String(categoria.id),
+        ), categoria].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+      }));
+      setNombreCategoria('');
+      setMensaje(yaExistia ? 'La categoría ya existía.' : 'Categoría creada.');
+    } catch (error) {
+      setMensaje(error.message);
+    } finally {
+      setGuardandoCategoria(false);
+    }
+  }
+
+  async function guardarCategoria(categoria) {
+    const nombre = nombresCategorias[categoria.id] ?? categoria.nombre;
+    setMensaje('');
+    setCategoriaEnProceso(categoria.id);
+    try {
+      await renombrarCategoria(categoria.id, nombre);
+      setPanel((actual) => ({
+        ...actual,
+        categorias: actual.categorias
+          .map((item) => item.id === categoria.id ? { ...item, nombre: nombre.trim() } : item)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+      }));
+      setNombresCategorias((actual) => {
+        const { [categoria.id]: omitido, ...resto } = actual;
+        return resto;
+      });
+      setMensaje('Categoría renombrada.');
+    } catch (error) {
+      setMensaje(error.message);
+    } finally {
+      setCategoriaEnProceso(null);
+    }
+  }
+
+  async function borrarCategoria(categoria) {
+    if (!window.confirm(`¿Eliminar la categoría "${categoria.nombre}"?`)) return;
+    setMensaje('');
+    setCategoriaEnProceso(categoria.id);
+    try {
+      await eliminarCategoria(categoria.id);
+      setPanel((actual) => ({
+        ...actual,
+        categorias: actual.categorias.filter((item) => item.id !== categoria.id),
+      }));
+      setNombresCategorias((actual) => {
+        const { [categoria.id]: omitido, ...resto } = actual;
+        return resto;
+      });
+      setMensaje('Categoría eliminada.');
+    } catch (error) {
+      setMensaje(error.message);
+    } finally {
+      setCategoriaEnProceso(null);
     }
   }
 
@@ -209,11 +294,28 @@ export default function AdminPanel() {
                     <td>{p.id}</td>
                     <td>{p.tipo}</td>
                     <td><input value={p.nombre} onChange={(e) => cambiar(p.id, 'nombre', e.target.value)} /></td>
-                    <td>{p.categoria}</td>
+                    <td>
+                      <select
+                        aria-label={`Categoría de ${p.nombre}`}
+                        required
+                        value={p.categoriaId ?? ''}
+                        onChange={(e) => cambiar(p.id, 'categoriaId', e.target.value)}
+                      >
+                        <option value="">CATEGORÍA</option>
+                        {panel.categorias.map((categoria) => (
+                          <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td><input type="number" step="0.01" min="0" value={p.precio} onChange={(e) => cambiar(p.id, 'precio', e.target.value)} /></td>
                     <td><input type="number" min="0" value={p.stock} onChange={(e) => cambiar(p.id, 'stock', e.target.value)} /></td>
                     <td className="admin-acciones">
-                      <button onClick={() => guardar(p)}>GUARDAR</button>
+                      <button
+                        disabled={guardandoProductoId === p.id}
+                        onClick={() => guardar(p)}
+                      >
+                        {guardandoProductoId === p.id ? 'GUARDANDO...' : 'GUARDAR'}
+                      </button>
                       <button onClick={() => borrar(p)}>ELIMINAR</button>
                     </td>
                   </tr>
@@ -276,6 +378,70 @@ export default function AdminPanel() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {panel && pestana === 'categorias' && (
+        <>
+          <p className="seccion">NUEVA CATEGORÍA</p>
+          <form className="form admin-form" onSubmit={agregarCategoria}>
+            <input
+              aria-label="Nombre de la categoría"
+              autoComplete="off"
+              maxLength="100"
+              placeholder="NOMBRE"
+              required
+              value={nombreCategoria}
+              onChange={(evento) => setNombreCategoria(evento.target.value)}
+            />
+            <button type="submit" disabled={guardandoCategoria}>
+              {guardandoCategoria ? 'GUARDANDO...' : 'CREAR CATEGORÍA'}
+            </button>
+          </form>
+
+          <p className="seccion">CATEGORÍAS EXISTENTES</p>
+          <div className="admin-tabla-wrap">
+            <table className="admin-tabla">
+              <thead>
+                <tr><th>ID</th><th>NOMBRE</th><th>ACCIONES</th></tr>
+              </thead>
+              <tbody>
+                {panel.categorias.map((categoria) => (
+                  <tr key={categoria.id}>
+                    <td>{categoria.id}</td>
+                    <td>
+                      <input
+                        aria-label={`Nombre de categoría ${categoria.nombre}`}
+                        required
+                        value={nombresCategorias[categoria.id] ?? categoria.nombre}
+                        onChange={(evento) => setNombresCategorias((actual) => ({
+                          ...actual,
+                          [categoria.id]: evento.target.value,
+                        }))}
+                      />
+                    </td>
+                    <td className="admin-acciones">
+                      <button
+                        disabled={categoriaEnProceso !== null}
+                        onClick={() => guardarCategoria(categoria)}
+                      >
+                        {categoriaEnProceso === categoria.id ? 'GUARDANDO...' : 'RENOMBRAR'}
+                      </button>
+                      <button
+                        disabled={categoriaEnProceso !== null}
+                        onClick={() => borrarCategoria(categoria)}
+                      >
+                        ELIMINAR
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {panel.categorias.length === 0 && (
+                  <tr><td colSpan="3">No hay categorías registradas.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );
