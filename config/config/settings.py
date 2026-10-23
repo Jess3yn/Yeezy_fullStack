@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     "yeezy_back",
     "oauth2_provider", 
     "strawberry_django", 
-    "corsheaders"
+    "corsheaders",
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -105,6 +106,15 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+
+# --- Tiempo real (subscriptions de GraphQL por WebSocket) ---
+ASGI_APPLICATION = 'config.asgi.application'
+
+# Canal en memoria: sirve con UN solo proceso (un worker de uvicorn).
+# Si algún día escalas a varias instancias, cámbialo por Redis (channels_redis).
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+}
 
 
 # Database

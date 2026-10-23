@@ -3,14 +3,15 @@ import strawberry, strawberry_django
 from django.db import IntegrityError, transaction, connection
 from strawberry import auto
 from strawberry_django.optimizer import DjangoOptimizerExtension
-from . import models
-from typing import Optional, cast
+from . import eventos, models
+from typing import AsyncGenerator, Optional, cast
 from enum import Enum
 from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
 from datetime import datetime, timedelta, timezone
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 from yeezy_back.mercadopago_service import crear_pago
+from yeezy_back.ws_auth import usuario_desde_connection_params
 
 
 
@@ -575,6 +576,26 @@ class Mutation:
                     """,
                     [disco_id, artista, input.duracion, input.year],
                 )
+                conn.execute(
+                    "SELECT nombre FROM categorias WHERE id = %s",
+                    [input.categoria_id],
+                )
+                fila_categoria = conn.fetchone()
+                categoria_nombre = fila_categoria[0] if fila_categoria else None
+
+        # La transacción ya se confirmó: avisamos a los suscriptores.
+        eventos.publicar_producto_nuevo({
+            "id": str(disco_id),
+            "tipo": "disco",
+            "nombre": nombre,
+            "imagen": input.imagen,
+            "stock": input.stock,
+            "precio": str(input.precio),
+            "categoria": categoria_nombre,
+            "artista": artista,
+            "duracion": input.duracion,
+            "year": input.year,
+        })
 
         return DiscoType(
             id=disco_id,
@@ -635,6 +656,24 @@ class Mutation:
                     """,
                     [producto_id, input.talla, input.genero.value],
                 )
+                conn.execute(
+                    "SELECT nombre FROM categorias WHERE id = %s",
+                    [input.categoria_id],
+                )
+                fila_categoria = conn.fetchone()
+                categoria_nombre = fila_categoria[0] if fila_categoria else None
+
+        # La transacción ya se confirmó: avisamos a los suscriptores.
+        eventos.publicar_producto_nuevo({
+            "id": str(producto_id),
+            "tipo": "ropa",
+            "nombre": nombre,
+            "imagen": input.imagen,
+            "stock": input.stock,
+            "precio": str(input.precio),
+            "categoria": categoria_nombre,
+            "talla": input.talla,
+        })
 
         return RopaType(
             id=producto_id,
@@ -916,4 +955,64 @@ class Mutation:
     #                 usuario=user, producto=p, cantidad=it.cantidad, precio_total=p.precio * it.cantidad))
     #     return creado # type: ignore
 
-schema = strawberry.Schema(query=Query, mutation=Mutation, extensions=[DjangoOptimizerExtension])
+# ---------------------------------------------------------------------------
+# Subscriptions (tiempo real)
+# ---------------------------------------------------------------------------
+@strawberry.type
+class ProductoNuevoType:
+    id: strawberry.ID
+    tipo: str
+    nombre: str
+    imagen: str | None
+    stock: int
+    precio: Decimal
+    categoria: str | None
+    artista: str | None = None
+    duracion: int | None = None
+    year: int | None = None
+    talla: str | None = None
+
+
+def _producto_nuevo_desde_evento(datos: dict) -> ProductoNuevoType:
+    return ProductoNuevoType(
+        id=strawberry.ID(str(datos["id"])),
+        tipo=datos["tipo"],
+        nombre=datos["nombre"],
+        imagen=datos.get("imagen"),
+        stock=int(datos["stock"]),
+        precio=Decimal(str(datos["precio"])),
+        categoria=datos.get("categoria"),
+        artista=datos.get("artista"),
+        duracion=datos.get("duracion"),
+        year=datos.get("year"),
+        talla=datos.get("talla"),
+    )
+
+
+@strawberry.type
+class Subscription:
+    @strawberry.subscription
+    async def producto_nuevo(
+        self, info: strawberry.Info
+    ) -> AsyncGenerator[ProductoNuevoType, None]:
+        """Emite un evento cada vez que el admin crea un disco o una prenda."""
+        usuario, token_expirado = usuario_desde_connection_params(
+            info.context.get("connection_params")
+        )
+        if usuario is None:
+            raise Exception("TOKEN_EXPIRADO" if token_expirado else "No autenticado")
+
+        ws = info.context["ws"]
+        async with ws.listen_to_channel(
+            eventos.TIPO_EVENTO_PRODUCTO, groups=[eventos.GRUPO_PRODUCTOS]
+        ) as mensajes:
+            async for mensaje in mensajes:
+                yield _producto_nuevo_desde_evento(mensaje["producto"])
+
+
+schema = strawberry.Schema(
+    query=Query,
+    mutation=Mutation,
+    subscription=Subscription,
+    extensions=[DjangoOptimizerExtension],
+)

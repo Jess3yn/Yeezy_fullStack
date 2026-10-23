@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ProductGrid from './ProductGrid.jsx';
 import { getProductos } from '../lib/api.js';
+import { suscribirProductoNuevo } from '../lib/realtime.js';
 
 const catalogos = [
   { clave: 'destacado', titulo: 'FEATURED' },
@@ -37,6 +38,19 @@ export default function CategoriasShop() {
       cancelado = true;
     };
   }, []);
+
+  // Tiempo real: cuando el admin crea una prenda, aparece sin recargar la página.
+  useEffect(() => {
+    if (cargando || error) return undefined;
+
+    return suscribirProductoNuevo('ropa', (prenda) => {
+      setProductos((actuales) =>
+        actuales.some((actual) => actual.id === prenda.id)
+          ? actuales
+          : [...actuales, prenda].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
+    });
+  }, [cargando, error]);
 
   const items = activa === 'all'
     ? productos

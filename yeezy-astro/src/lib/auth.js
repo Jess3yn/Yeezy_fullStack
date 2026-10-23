@@ -97,6 +97,28 @@ export async function authenticatedGraphqlRequest(query, variables = {}) {
   }
 }
 
+// Devuelve un access token que no esté a punto de vencer (lo renueva si hace falta).
+// Lo usa el WebSocket, que no pasa por authenticatedGraphqlRequest.
+export async function getFreshAccessToken() {
+  const accessToken = getAccessToken();
+  if (!accessToken) {
+    throw new Error('Iniciar Sesion');
+  }
+
+  let expiraEnMs = Infinity;
+  try {
+    const base64 = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(window.atob(base64));
+    if (typeof exp === 'number') {
+      expiraEnMs = exp * 1000 - Date.now();
+    }
+  } catch {
+    // Si el token no se puede leer, se usa tal cual.
+  }
+
+  return expiraEnMs < 30_000 ? refreshSession() : accessToken;
+}
+
 function saveAuth(auth) {
   if (typeof window === 'undefined') {
     throw new Error('window error');

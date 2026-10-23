@@ -139,6 +139,29 @@ export async function pagarPedido(items, pago) {
   return data.pagarPedido;
 }
 
+// Convierte un producto recibido por la subscription al mismo formato
+// que devuelven getDiscos() y getProductos() (ropa).
+export function normalizarProductoNuevo(producto) {
+  const base = {
+    id: numericId(producto.id),
+    nombre: producto.nombre,
+    precio: numericPrice(producto.precio),
+    stock: Number(producto.stock),
+  };
+
+  if (producto.tipo === 'disco') {
+    return { ...base, imagen: productImage(producto.imagen) || defaultDiscImage };
+  }
+
+  const seccion = categorySlug(producto.categoria);
+  return {
+    ...base,
+    imagen: productImage(producto.imagen),
+    seccion,
+    ...(seccion === 'destacado' ? { destacado: true } : {}),
+  };
+}
+
 export async function getMisPedidos() {
   const data = await authenticatedGraphqlRequest(`
     query MisPedidos {
