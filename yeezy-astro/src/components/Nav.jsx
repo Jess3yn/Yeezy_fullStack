@@ -19,7 +19,7 @@ export default function Nav({ activa }) {
           {admin && <a className={activa === 'admin' ? 'activo' : ''} href="/admin">ADMIN</a>}
         </nav>
         <div className="iconos">
-  <a className="cuenta" href="/login">
+        <a className="cuenta" href="/login" aria-label="Iniciar sesión">
     <svg viewBox="0 0 24 24" width="18" height="18">
       <circle cx="12" cy="8" r="4" fill="none" stroke="#111" strokeWidth="1.5" />
       <path d="M4 20c0-4 4-6 8-6s8 2 8 6" fill="none" stroke="#111" strokeWidth="1.5" />

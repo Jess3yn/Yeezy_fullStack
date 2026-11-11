@@ -296,8 +296,7 @@ export default function AdminPanel() {
           ))}
         </div>
       </div>
-      {mensaje && <p className="form-msg" role="status">{mensaje}</p>}
-      {!panel && !mensaje && <p className="form-msg">Cargando...</p>}
+      
 
       {panel && pestana === 'resumen' && (
         <>
@@ -446,7 +445,8 @@ export default function AdminPanel() {
           </form>
         </>
       )}
-
+      {mensaje && <p className="form-msg" role="status">{mensaje}</p>}
+      {!panel && !mensaje && <p className="form-msg">Cargando...</p>}
       {panel && pestana === 'usuarios' && (
         <div className="admin-tabla-wrap">
           <table className="admin-tabla">
@@ -529,7 +529,9 @@ export default function AdminPanel() {
             </table>
           </div>
         </>
-      )}
+      )
+      
+      }
     </section>
   );
 }
