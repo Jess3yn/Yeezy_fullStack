@@ -133,7 +133,7 @@ export default function AdminPanel() {
       const imagen = await uploadProductImage(archivo);
       setImagenes((actuales) => [...actuales, imagen].sort((a, b) => a.name.localeCompare(b.name)));
       alCompletar(imagen.name);
-      setMensaje('Imagen subida a Supabase.');
+      setMensaje('Imagen subiba');
     } catch (error) {
       setMensaje(error.message);
     } finally {
@@ -146,7 +146,7 @@ export default function AdminPanel() {
     setGuardandoProductoId(producto.id);
     try {
       await actualizarProducto(producto);
-      setMensaje('Producto actualizado.');
+      setMensaje('Producto actualizado');
       await cargar();
     } catch (error) {
       setMensaje(error.message);
@@ -160,7 +160,7 @@ export default function AdminPanel() {
     setMensaje('');
     try {
       await eliminarProducto(producto.id);
-      setMensaje('Producto eliminado.');
+      setMensaje('Producto eliminado');
       cargar();
     } catch (error) {
       setMensaje(error.message);
@@ -174,7 +174,7 @@ export default function AdminPanel() {
       if (nuevo.tipo === 'ropa') await crearRopa(nuevo);
       else await crearDisco(nuevo);
       setNuevo(productoVacio);
-      setMensaje('Producto creado.');
+      setMensaje('Producto creado');
       cargar();
     } catch (error) {
       setMensaje(error.message);
@@ -197,7 +197,7 @@ export default function AdminPanel() {
         ), categoria].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
       }));
       setNombreCategoria('');
-      setMensaje(yaExistia ? 'La categoría ya existía.' : 'Categoría creada.');
+      setMensaje(yaExistia ? 'La categoría ya existe' : 'Categoría creada');
     } catch (error) {
       setMensaje(error.message);
     } finally {
@@ -221,7 +221,7 @@ export default function AdminPanel() {
         const { [categoria.id]: omitido, ...resto } = actual;
         return resto;
       });
-      setMensaje('Categoría renombrada.');
+      setMensaje('Cambio de nombre de categoria');
     } catch (error) {
       setMensaje(error.message);
     } finally {
@@ -243,7 +243,7 @@ export default function AdminPanel() {
         const { [categoria.id]: omitido, ...resto } = actual;
         return resto;
       });
-      setMensaje('Categoría eliminada.');
+      setMensaje('Categoría eliminada');
     } catch (error) {
       setMensaje(error.message);
     } finally {
@@ -263,7 +263,7 @@ export default function AdminPanel() {
   if (!usuario) {
     return (
       <section className="admin-page">
-        <p className="form-msg"><a href="/login">Inicia sesión</a> para entrar.</p>
+        <p className="form-msg"><a href="/login">Inicia sesión</a> para entrar</p>
       </section>
     );
   }
@@ -271,7 +271,7 @@ export default function AdminPanel() {
   if (usuario.rol !== 'ADMIN') {
     return (
       <section className="admin-page">
-        <p className="form-msg">Esta página es solo para administradores.</p>
+        <p className="form-msg">Esta página es solo para administradores</p>
       </section>
     );
   }
@@ -523,7 +523,7 @@ export default function AdminPanel() {
                   </tr>
                 ))}
                 {panel.categorias.length === 0 && (
-                  <tr><td colSpan="3">No hay categorías registradas.</td></tr>
+                  <tr><td colSpan="3">No hay categorías registradas</td></tr>
                 )}
               </tbody>
             </table>
