@@ -773,7 +773,7 @@ class Mutation:
     @strawberry.mutation
     def actualizar_producto(
         self, info: strawberry.Info, id: strawberry.ID, nombre: str, precio: Decimal,
-        stock: int, categoria_id: int | None = None
+        stock: int, imagen: str | None, categoria_id: int | None = None
     ) -> bool:
         requerir_admin(info)
         if not nombre.strip():
@@ -784,10 +784,11 @@ class Mutation:
             if categoria_id is None:
                 conn.execute(
                     """
-                    UPDATE productos SET nombre = %s, precio = %s, stock = %s
+                    UPDATE productos
+                    SET nombre = %s, precio = %s, stock = %s, imagen = %s
                     WHERE id = %s
                     """,
-                    [nombre.strip(), precio, stock, int(id)],
+                    [nombre.strip(), precio, stock, imagen, int(id)],
                 )
             else:
                 conn.execute("SELECT 1 FROM categorias WHERE id = %s", [categoria_id])
@@ -796,10 +797,11 @@ class Mutation:
                 conn.execute(
                     """
                     UPDATE productos
-                    SET nombre = %s, precio = %s, stock = %s, categoria_id = %s
+                    SET nombre = %s, precio = %s, stock = %s, categoria_id = %s,
+                        imagen = %s
                     WHERE id = %s
                     """,
-                    [nombre.strip(), precio, stock, categoria_id, int(id)],
+                    [nombre.strip(), precio, stock, categoria_id, imagen, int(id)],
                 )
             if conn.rowcount == 0:
                 raise Exception("El producto no existe")
@@ -955,9 +957,9 @@ class Mutation:
     #                 usuario=user, producto=p, cantidad=it.cantidad, precio_total=p.precio * it.cantidad))
     #     return creado # type: ignore
 
-# ---------------------------------------------------------------------------
-# Subscriptions (tiempo real)
-# ---------------------------------------------------------------------------
+
+
+
 @strawberry.type
 class ProductoNuevoType:
     id: strawberry.ID

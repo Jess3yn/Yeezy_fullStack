@@ -25,6 +25,7 @@ from django.http import HttpRequest, HttpResponse
 from typing import Any
 from strawberry.django.views import GraphQLView
 from yeezy_back.schema import schema
+from yeezy_back.views import admin_product_images
 from yeezy_back.jwt_servicce import decodificar_token
 
 class BearerGraphQLView(GraphQLView[dict[str, Any], None]):
@@ -51,6 +52,7 @@ class BearerGraphQLView(GraphQLView[dict[str, Any], None]):
         }
 
 urlpatterns = [
+    path("admin/product-images/", admin_product_images),
     path("admin/", admin.site.urls),
     #path("accounts/login/", auth_views.LoginView.as_view()),
     #path("accounts/logout/", auth_views.LogoutView.as_view()),

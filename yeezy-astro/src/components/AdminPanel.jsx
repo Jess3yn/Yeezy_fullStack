@@ -9,6 +9,8 @@ import {
   eliminarCategoria,
   crearRopa,
   crearDisco,
+  getProductImages,
+  uploadProductImage,
 } from '../lib/admin.js';
 import '../styles/pago-admin.css';
 
@@ -38,12 +40,55 @@ const productoVacio = {
   year: '',
 };
 
+function SelectorImagen({ value, images, disabled, onChange, onUpload }) {
+  const seleccion = value && !/^https?:\/\//i.test(value)
+    ? value.replace(/^products\//, '')
+    : value || '';
+  const imagenSeleccionada = images.find((imagen) => imagen.name === seleccion);
+  const urlPrevia = imagenSeleccionada?.url
+    || (/^https?:\/\//i.test(seleccion) ? seleccion : '');
+
+  return (
+    <div className="admin-imagen-selector">
+      <select
+        aria-label="Seleccionar imagen del bucket"
+        disabled={disabled}
+        value={seleccion}
+        onChange={(evento) => onChange(evento.target.value)}
+      >
+        <option value="">SIN IMAGEN</option>
+        {seleccion && !imagenSeleccionada && (
+          <option value={seleccion}>IMAGEN ACTUAL</option>
+        )}
+        {images.map((imagen) => (
+          <option key={imagen.name} value={imagen.name}>{imagen.name}</option>
+        ))}
+      </select>
+      <label>
+        <input
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          aria-label="Subir imagen a Supabase"
+          disabled={disabled}
+          type="file"
+          onChange={(evento) => {
+            const archivo = evento.target.files?.[0];
+            evento.target.value = '';
+            if (archivo) onUpload(archivo);
+          }}
+        />
+      </label>
+      {urlPrevia && <img src={urlPrevia} alt="Vista previa del producto" />}
+    </div>
+  );
+}
+
 export default function AdminPanel() {
   const [usuario, setUsuario] = useState(null);
   const [listo, setListo] = useState(false);
   const [panel, setPanel] = useState(null);
   const [pestana, setPestana] = useState('resumen');
   const [productos, setProductos] = useState([]);
+  const [imagenes, setImagenes] = useState([]);
   const [nuevo, setNuevo] = useState(productoVacio);
   
   const [nombreCategoria, setNombreCategoria] = useState('');
@@ -52,6 +97,7 @@ export default function AdminPanel() {
   const [guardandoCategoria, setGuardandoCategoria] = useState(false);
   const [categoriaEnProceso, setCategoriaEnProceso] = useState(null);
   const [guardandoProductoId, setGuardandoProductoId] = useState(null);
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => {
@@ -64,6 +110,7 @@ export default function AdminPanel() {
       const datos = await getPanel();
       setPanel(datos);
       setProductos(datos.adminProductos);
+      setImagenes(await getProductImages());
     } catch (error) {
       setMensaje(error.message);
     }
@@ -74,7 +121,24 @@ export default function AdminPanel() {
   }, [usuario]);
 
   function cambiar(id, campo, valor) {
-    setProductos(productos.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)));
+    setProductos((actuales) => actuales.map((p) => (
+      p.id === id ? { ...p, [campo]: valor } : p
+    )));
+  }
+
+  async function subirImagen(archivo, alCompletar) {
+    setMensaje('');
+    setSubiendoImagen(true);
+    try {
+      const imagen = await uploadProductImage(archivo);
+      setImagenes((actuales) => [...actuales, imagen].sort((a, b) => a.name.localeCompare(b.name)));
+      alCompletar(imagen.name);
+      setMensaje('Imagen subida a Supabase.');
+    } catch (error) {
+      setMensaje(error.message);
+    } finally {
+      setSubiendoImagen(false);
+    }
   }
 
   async function guardar(producto) {
@@ -286,7 +350,7 @@ export default function AdminPanel() {
           <div className="admin-tabla-wrap">
             <table className="admin-tabla">
               <thead>
-                <tr><th>ID</th><th>TIPO</th><th>NOMBRE</th><th>CATEGORIA</th><th>PRECIO</th><th>STOCK</th><th></th></tr>
+                <tr><th>ID</th><th>TIPO</th><th>NOMBRE</th><th>IMAGEN</th><th>CATEGORIA</th><th>PRECIO</th><th>STOCK</th><th></th></tr>
               </thead>
               <tbody>
                 {productos.map((p) => (
@@ -294,6 +358,18 @@ export default function AdminPanel() {
                     <td>{p.id}</td>
                     <td>{p.tipo}</td>
                     <td><input value={p.nombre} onChange={(e) => cambiar(p.id, 'nombre', e.target.value)} /></td>
+                    <td>
+                      <SelectorImagen
+                        value={p.imagen}
+                        images={imagenes}
+                        disabled={subiendoImagen || guardandoProductoId === p.id}
+                        onChange={(valor) => cambiar(p.id, 'imagen', valor)}
+                        onUpload={(archivo) => subirImagen(
+                          archivo,
+                          (nombre) => cambiar(p.id, 'imagen', nombre),
+                        )}
+                      />
+                    </td>
                     <td>
                       <select
                         aria-label={`Categoría de ${p.nombre}`}
@@ -311,7 +387,7 @@ export default function AdminPanel() {
                     <td><input type="number" min="0" value={p.stock} onChange={(e) => cambiar(p.id, 'stock', e.target.value)} /></td>
                     <td className="admin-acciones">
                       <button
-                        disabled={guardandoProductoId === p.id}
+                        disabled={guardandoProductoId === p.id || subiendoImagen}
                         onClick={() => guardar(p)}
                       >
                         {guardandoProductoId === p.id ? 'GUARDANDO...' : 'GUARDAR'}
@@ -331,7 +407,16 @@ export default function AdminPanel() {
               <option value="disco">DISCO</option>
             </select>
             <input placeholder="NOMBRE" required {...campo('nombre')} />
-            <input placeholder="IMAGEN (nombre del archivo)" {...campo('imagen')} />
+            <SelectorImagen
+              value={nuevo.imagen}
+              images={imagenes}
+              disabled={subiendoImagen}
+              onChange={(valor) => setNuevo({ ...nuevo, imagen: valor })}
+              onUpload={(archivo) => subirImagen(
+                archivo,
+                (nombre) => setNuevo((actual) => ({ ...actual, imagen: nombre })),
+              )}
+            />
             <input type="number" step="0.01" min="0" placeholder="PRECIO" required {...campo('precio')} />
             <input type="number" min="0" placeholder="STOCK" required {...campo('stock')} />
             <select required {...campo('categoriaId')}>
@@ -355,7 +440,9 @@ export default function AdminPanel() {
                 <input type="number" min="0" placeholder="AÑO" {...campo('year')} />
               </>
             )}
-            <button type="submit">CREAR</button>
+            <button type="submit" disabled={subiendoImagen}>
+              {subiendoImagen ? 'SUBIENDO IMAGEN...' : 'CREAR'}
+            </button>
           </form>
         </>
       )}

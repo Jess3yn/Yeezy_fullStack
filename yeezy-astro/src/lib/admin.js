@@ -1,4 +1,48 @@
-import { authenticatedGraphqlRequest } from './auth.js';
+import { authenticatedGraphqlRequest, getFreshAccessToken } from './auth.js';
+
+const graphqlUrl = (
+  import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:8000/graphql/'
+).trim();
+const productImagesUrl = graphqlUrl.replace(/graphql\/?$/, 'admin/product-images/');
+
+async function productImagesRequest(options = {}) {
+  const accessToken = await getFreshAccessToken();
+  const response = await fetch(productImagesUrl, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`El servidor respondió con un formato no válido (${response.status}).`);
+  }
+  if (!response.ok) {
+    throw new Error(result?.error || `No se pudieron cargar las imágenes (${response.status}).`);
+  }
+  return result;
+}
+
+export async function getProductImages() {
+  const data = await productImagesRequest();
+  if (!Array.isArray(data?.images)) {
+    throw new Error('El servidor no devolvió la lista de imágenes esperada.');
+  }
+  return data.images;
+}
+
+export async function uploadProductImage(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const data = await productImagesRequest({ method: 'POST', body: formData });
+  if (!data?.name || !data?.url) {
+    throw new Error('El servidor no confirmó la imagen subida.');
+  }
+  return data;
+}
 
 export async function getPanel() {
   return authenticatedGraphqlRequest(`
@@ -31,6 +75,7 @@ export async function getPanel() {
         categoriaId
         stock
         precio
+        imagen
       }
       adminUsuarios {
         id
@@ -48,14 +93,15 @@ export async function getPanel() {
 
 export async function actualizarProducto(producto) {
   await authenticatedGraphqlRequest(
-    `mutation Actualizar($id: ID!, $nombre: String!, $precio: Decimal!, $stock: Int!, $categoriaId: Int!) {
-      actualizarProducto(id: $id, nombre: $nombre, precio: $precio, stock: $stock, categoriaId: $categoriaId)
+    `mutation Actualizar($id: ID!, $nombre: String!, $precio: Decimal!, $stock: Int!, $imagen: String, $categoriaId: Int!) {
+      actualizarProducto(id: $id, nombre: $nombre, precio: $precio, stock: $stock, imagen: $imagen, categoriaId: $categoriaId)
     }`,
     {
       id: String(producto.id),
       nombre: producto.nombre,
       precio: String(producto.precio),
       stock: Number(producto.stock),
+      imagen: producto.imagen || null,
       categoriaId: Number(producto.categoriaId),
     },
   );

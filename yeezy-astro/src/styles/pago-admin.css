@@ -32,6 +32,12 @@
 .admin-acciones button:last-child { color: #8c1d18; }
 .admin-form { max-width: 360px; margin: 0 auto; }
 .admin-form select { border: none; border-bottom: 1px solid #ddd; padding: 8px 0; font: inherit; font-size: 12px; background: #fff; }
+.admin-imagen-selector { display: flex; flex-direction: column; gap: 6px; min-width: 125px; }
+.admin-imagen-selector select { width: 100%; border: none; border-bottom: 1px solid #ddd; padding: 4px 0; font: inherit; font-size: 10px; background: #fff; }
+.admin-imagen-selector label { font-size: 9px; cursor: pointer; }
+.admin-imagen-selector input[type="file"] { display: block; width: 100%; font-size: 9px; }
+.admin-imagen-selector img { width: 44px; height: 44px; object-fit: cover; }
+.admin-imagen-selector :disabled { cursor: not-allowed; }
 @media (max-width: 700px) {
   .admin-tarjetas { grid-template-columns: repeat(2, 1fr); }
 }
