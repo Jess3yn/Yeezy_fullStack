@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { addToCart } from '../lib/cart.js';
 
-export default function ProductGrid({ productos, tipo }) {
+export default function ProductGrid({ productos, tipo, renderAccion }) {
   const [aviso, setAviso] = useState('');
   const avisoTimeout = useRef(null);
 
@@ -46,6 +46,7 @@ export default function ProductGrid({ productos, tipo }) {
             <p className="nombre">{p.nombre}</p>
             {p.precio != null && <p className="nombre">${Number(p.precio).toFixed(2)}</p>}
             {p.stock === 0 && <p className="estado">SOLD OUT</p>}
+            {renderAccion?.(p)}
           </div>
         ))}
       </section>

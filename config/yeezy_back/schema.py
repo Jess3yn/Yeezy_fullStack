@@ -9,6 +9,8 @@ from enum import Enum
 from passlib.context import CryptContext
 from email_validator import validate_email, EmailNotValidError
 from datetime import datetime, timedelta, timezone
+import re
+from urllib.parse import parse_qs, urlparse
 from yeezy_back.jwt_servicce import generar_access_token, generar_refresh_token, decodificar_token
 from yeezy_back.mercadopago_service import crear_pago
 from yeezy_back.ws_auth import usuario_desde_connection_params
@@ -30,6 +32,41 @@ def requerir_admin(info: strawberry.Info):
         if usuario["rol"] != "ADMIN":
             raise Exception("No autorizado")
         return usuario
+
+def validar_audio_disco(audio: str | None, start: int | None, duracion: int | None):
+    if start is not None and start < 0:
+        raise Exception("El inicio del clip debe ser cero o mayor")
+    if duracion is not None and duracion <= 0:
+        raise Exception("La duración del clip debe ser mayor que cero segundos")
+    if not audio:
+        return None, None
+
+    try:
+        url = urlparse(audio)
+    except ValueError as error:
+        raise Exception("El audio debe ser un enlace de YouTube válido") from error
+    host = (url.hostname or "").lower()
+    if url.scheme != "https":
+        raise Exception("El audio debe ser un enlace de YouTube válido")
+
+    video_id = None
+    if host == "youtu.be":
+        video_id = url.path.strip("/").split("/", 1)[0]
+    elif host == "youtube.com" or host.endswith(".youtube.com"):
+        if url.path == "/watch":
+            video_id = parse_qs(url.query).get("v", [None])[0]
+        else:
+            path_parts = url.path.strip("/").split("/")
+            if len(path_parts) == 2 and path_parts[0] in ("embed", "shorts", "live"):
+                video_id = path_parts[1]
+
+    if not video_id or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        raise Exception("El audio debe ser un enlace de YouTube válido")
+    if start is None:
+        raise Exception("El inicio del clip debe ser cero o mayor")
+    if duracion is None:
+        raise Exception("La duración del clip debe ser mayor que cero segundos")
+    return audio, start
 
 class RolEnum(Enum):
     ADMIN = "ADMIN"
@@ -98,6 +135,8 @@ class DiscoType:
     artista: str
     duracion: int | None
     year: int | None
+    audio: str | None
+    start: int | None
 
 @strawberry.type()
 class DiscoTypeQuery:
@@ -110,6 +149,8 @@ class DiscoTypeQuery:
     artista: str
     duracion: int | None
     year: int | None
+    audio: str | None
+    start: int | None
 
 @strawberry.input
 class DiscoInput:
@@ -121,6 +162,8 @@ class DiscoInput:
     artista: str
     duracion: int | None = None
     year: int | None = None
+    audio: str | None = None
+    start: int | None = None
 
 #Ropa
 @strawberry.type()
@@ -246,6 +289,9 @@ class AdminProducto:
     stock: int
     precio: Decimal
     imagen: str | None
+    audio: str | None
+    start: int | None
+    duracion: int | None
 
 
 @strawberry.type
@@ -289,7 +335,7 @@ class Query:
         conn = connection.cursor()
         conn.execute("""
             SELECT p.id, p.nombre, p.stock, c.nombre AS categoria, p.imagen, p.precio,
-                   d.artista, d.duracion, d.year
+                   d.artista, d.duracion, d.year, d.audio, d.start
             FROM productos p
             JOIN discos d ON d.producto_id = p.id
             LEFT JOIN categorias c ON c.id = p.categoria_id
@@ -384,9 +430,11 @@ class Query:
         requerir_admin(info)
         filas = consultar("""
             SELECT p.id, p.tipo, p.nombre, c.nombre AS categoria,
-                   p.categoria_id AS categoria_id, p.stock, p.precio, p.imagen
+                   p.categoria_id AS categoria_id, p.stock, p.precio, p.imagen,
+                   d.audio, d.start, d.duracion
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
+            LEFT JOIN discos d ON d.producto_id = p.id AND p.tipo = 'disco'
             ORDER BY p.id
         """)
         return [AdminProducto(**f) for f in filas]
@@ -505,6 +553,11 @@ class Mutation:
             raise Exception("El stock no puede ser negativo")
         if input.precio < 0:
             raise Exception("El precio no puede ser negativo")
+        audio, start = validar_audio_disco(
+            (input.audio or "").strip() or None,
+            input.start,
+            input.duracion,
+        )
 
         with transaction.atomic():
             with connection.cursor() as conn:
@@ -524,7 +577,7 @@ class Mutation:
                         raise Exception("Ya existe otro tipo de producto con ese nombre")
                     conn.execute(
                         """
-                        SELECT artista, duracion, year
+                        SELECT artista, duracion, year, audio, start
                         FROM discos
                         WHERE producto_id = %s
                         """,
@@ -543,6 +596,8 @@ class Mutation:
                         artista=detalles[0],
                         duracion=detalles[1],
                         year=detalles[2],
+                        audio=detalles[3],
+                        start=detalles[4],
                     )
 
                 conn.execute(
@@ -571,10 +626,11 @@ class Mutation:
                 )
                 conn.execute(
                     """
-                    INSERT INTO discos (producto_id, artista, duracion, year)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO discos
+                        (producto_id, artista, duracion, year, audio, start)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    [disco_id, artista, input.duracion, input.year],
+                    [disco_id, artista, input.duracion, input.year, audio, start],
                 )
                 conn.execute(
                     "SELECT nombre FROM categorias WHERE id = %s",
@@ -595,6 +651,8 @@ class Mutation:
             "artista": artista,
             "duracion": input.duracion,
             "year": input.year,
+            "audio": audio,
+            "start": start,
         })
 
         return DiscoType(
@@ -607,6 +665,8 @@ class Mutation:
             artista=artista,
             duracion=input.duracion,
             year=input.year,
+            audio=audio,
+            start=start,
         )
     
     @strawberry.mutation
@@ -663,7 +723,7 @@ class Mutation:
                 fila_categoria = conn.fetchone()
                 categoria_nombre = fila_categoria[0] if fila_categoria else None
 
-        # La transacción ya se confirmó: avisamos a los suscriptores.
+        # avisamos a los suscriptores.
         eventos.publicar_producto_nuevo({
             "id": str(producto_id),
             "tipo": "ropa",
@@ -773,38 +833,65 @@ class Mutation:
     @strawberry.mutation
     def actualizar_producto(
         self, info: strawberry.Info, id: strawberry.ID, nombre: str, precio: Decimal,
-        stock: int, imagen: str | None, categoria_id: int | None = None
+        stock: int, imagen: str | None, categoria_id: int | None = None,
+        audio: str | None = strawberry.UNSET, start: int | None = strawberry.UNSET,
+        duracion: int | None = strawberry.UNSET,
     ) -> bool:
         requerir_admin(info)
         if not nombre.strip():
             raise Exception("El nombre es obligatorio")
         if precio < 0 or stock < 0:
             raise Exception("El precio y el stock no pueden ser negativos")
-        with connection.cursor() as conn:
-            if categoria_id is None:
-                conn.execute(
-                    """
-                    UPDATE productos
-                    SET nombre = %s, precio = %s, stock = %s, imagen = %s
-                    WHERE id = %s
-                    """,
-                    [nombre.strip(), precio, stock, imagen, int(id)],
-                )
-            else:
-                conn.execute("SELECT 1 FROM categorias WHERE id = %s", [categoria_id])
-                if conn.fetchone() is None:
-                    raise Exception("La categoría no existe")
-                conn.execute(
-                    """
-                    UPDATE productos
-                    SET nombre = %s, precio = %s, stock = %s, categoria_id = %s,
-                        imagen = %s
-                    WHERE id = %s
-                    """,
-                    [nombre.strip(), precio, stock, categoria_id, imagen, int(id)],
-                )
-            if conn.rowcount == 0:
-                raise Exception("El producto no existe")
+        with transaction.atomic():
+            with connection.cursor() as conn:
+                conn.execute("SELECT tipo FROM productos WHERE id = %s", [int(id)])
+                producto = conn.fetchone()
+                if producto is None:
+                    raise Exception("El producto no existe")
+                if categoria_id is None:
+                    conn.execute(
+                        """
+                        UPDATE productos
+                        SET nombre = %s, precio = %s, stock = %s, imagen = %s
+                        WHERE id = %s
+                        """,
+                        [nombre.strip(), precio, stock, imagen, int(id)],
+                    )
+                else:
+                    conn.execute("SELECT 1 FROM categorias WHERE id = %s", [categoria_id])
+                    if conn.fetchone() is None:
+                        raise Exception("La categoría no existe")
+                    conn.execute(
+                        """
+                        UPDATE productos
+                        SET nombre = %s, precio = %s, stock = %s, categoria_id = %s,
+                            imagen = %s
+                        WHERE id = %s
+                        """,
+                        [nombre.strip(), precio, stock, categoria_id, imagen, int(id)],
+                    )
+                if producto[0] == "disco" and any(
+                    value is not strawberry.UNSET for value in (audio, start, duracion)
+                ):
+                    audio_value = (
+                        None if audio is strawberry.UNSET else (audio or "").strip() or None
+                    )
+                    start_value = None if start is strawberry.UNSET else start
+                    duration_value = None if duracion is strawberry.UNSET else duracion
+                    audio_value, start_value = validar_audio_disco(
+                        audio_value,
+                        start_value,
+                        duration_value,
+                    )
+                    conn.execute(
+                        """
+                        UPDATE discos SET audio = %s, start = %s, duracion = %s
+                        WHERE producto_id = %s
+                        """,
+                        [audio_value, start_value, duration_value, int(id)],
+                    )
+                    if conn.rowcount == 0:
+                        raise Exception("Los datos del disco no existen")
         return True
 
     @strawberry.mutation
@@ -971,6 +1058,8 @@ class ProductoNuevoType:
     categoria: str | None
     artista: str | None = None
     duracion: int | None = None
+    audio: str | None = None
+    start: int | None = None
     year: int | None = None
     talla: str | None = None
 
@@ -986,6 +1075,8 @@ def _producto_nuevo_desde_evento(datos: dict) -> ProductoNuevoType:
         categoria=datos.get("categoria"),
         artista=datos.get("artista"),
         duracion=datos.get("duracion"),
+        audio=datos.get("audio"),
+        start=datos.get("start"),
         year=datos.get("year"),
         talla=datos.get("talla"),
     )

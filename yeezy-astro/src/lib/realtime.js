@@ -48,6 +48,8 @@ const consultaProductoNuevo = `
       categoria
       artista
       duracion
+      audio
+      start
       year
       talla
     }

@@ -107,6 +107,47 @@ const { title = 'YZY' } = Astro.props;
   .producto:hover .imagen img { opacity: .6; transform: scale(1.06); }
   .imagen-agregar:disabled img { transform: none; }
   .sin-imagen { width: 60%; height: 60%; background: #f2f2f2; }
+  .youtube-clip { display: flex; width: 100%; flex-direction: column; align-items: center; gap: 6px; }
+  .youtube-clip-toggle, .youtube-clip-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 0;
+    padding: 6px 8px;
+    background: transparent;
+    color: #111;
+    font: inherit;
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .youtube-clip-toggle svg { width: 16px; height: 16px; fill: currentColor; }
+  .youtube-clip-toggle:disabled { color: #aaa; cursor: not-allowed; }
+  .youtube-clip-overlay {
+    position: fixed;
+    z-index: 60;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgb(0 0 0 / 72%);
+  }
+  .youtube-clip-player {
+    width: min(560px, calc(100vw - 32px));
+    padding: 12px;
+    background: #fff;
+    box-shadow: 0 12px 48px rgb(0 0 0 / 30%);
+  }
+  .youtube-clip-frame { width: 100%; aspect-ratio: 16 / 9; background: #111; }
+  .youtube-clip-frame iframe { width: 100%; height: 100%; }
+  .youtube-clip-close { width: 100%; font-size: 8px; }
+  .youtube-clip-help, .youtube-clip-error { color: #8c1d18; font-size: 10px; }
+  .youtube-clip-error { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .youtube-clip-error a { color: inherit; text-decoration: underline; }
+  .admin-imagen-selector + td .youtube-clip, .admin-form .youtube-clip { align-items: flex-start; }
+  .admin-form .youtube-clip { width: 100%; }
   .cart-notice {
     position: fixed;
     z-index: 30;

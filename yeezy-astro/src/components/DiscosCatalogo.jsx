@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ProductGrid from './ProductGrid.jsx';
+import YouTubeClipPlayer from './YouTubeClipPlayer.jsx';
 import { getDiscos } from '../lib/api.js';
 import { suscribirProductoNuevo } from '../lib/realtime.js';
 
@@ -49,7 +50,20 @@ export default function DiscosCatalogo() {
           {error} <a href="/login">Inicia sesión</a>
         </p>
       )}
-      {!cargando && !error && <ProductGrid productos={discos} tipo="disco" />}
+      {!cargando && !error && (
+        <ProductGrid
+          productos={discos}
+          tipo="disco"
+          renderAccion={(disco) => (
+            <YouTubeClipPlayer
+              audioUrl={disco.audio}
+              duration={disco.duracion}
+              label={`audio de ${disco.nombre}`}
+              start={disco.start}
+            />
+          )}
+        />
+      )}
     </>
   );
 }
