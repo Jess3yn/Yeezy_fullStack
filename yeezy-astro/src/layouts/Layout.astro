@@ -3,6 +3,9 @@ const { title = 'YZY' } = Astro.props;
 ---
 <html lang="es">
   <head>
+    <meta name="theme-color" content="#111111" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
@@ -42,7 +45,8 @@ const { title = 'YZY' } = Astro.props;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
   }
-  .iconos { display: flex; gap: 14px; justify-self: end; }
+  .iconos { display: flex; gap: 14px; justify-self: end; align-items: center; }
+  .instalar { background: none; border: 1px solid #111; color: #111; font: inherit; font-size: 10px; letter-spacing: 1px; padding: 4px 8px; cursor: pointer; }
   .menu {
     display: flex;
     gap: 20px;
@@ -237,3 +241,7 @@ const { title = 'YZY' } = Astro.props;
     .cart-quantity { margin-left: 86px; }
   }
 </style>
+<script>
+  import { registerSW } from 'virtual:pwa-register';
+  registerSW({ immediate: true });
+</script>
