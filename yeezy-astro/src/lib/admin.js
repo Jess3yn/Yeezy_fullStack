@@ -76,6 +76,9 @@ export async function getPanel() {
         stock
         precio
         imagen
+        audio
+        start
+        duracion
       }
       adminUsuarios {
         id
@@ -92,9 +95,10 @@ export async function getPanel() {
 }
 
 export async function actualizarProducto(producto) {
+  const audio = producto.tipo === 'disco' ? producto.audio?.trim() || null : null;
   await authenticatedGraphqlRequest(
-    `mutation Actualizar($id: ID!, $nombre: String!, $precio: Decimal!, $stock: Int!, $imagen: String, $categoriaId: Int!) {
-      actualizarProducto(id: $id, nombre: $nombre, precio: $precio, stock: $stock, imagen: $imagen, categoriaId: $categoriaId)
+    `mutation Actualizar($id: ID!, $nombre: String!, $precio: Decimal!, $stock: Int!, $imagen: String, $categoriaId: Int!, $audio: String, $start: Int, $duracion: Int) {
+      actualizarProducto(id: $id, nombre: $nombre, precio: $precio, stock: $stock, imagen: $imagen, categoriaId: $categoriaId, audio: $audio, start: $start, duracion: $duracion)
     }`,
     {
       id: String(producto.id),
@@ -103,6 +107,13 @@ export async function actualizarProducto(producto) {
       stock: Number(producto.stock),
       imagen: producto.imagen || null,
       categoriaId: Number(producto.categoriaId),
+      audio,
+      start: audio ? Number(producto.start ?? 0) : null,
+      duracion: producto.duracion !== ''
+        && producto.duracion !== null
+        && producto.duracion !== undefined
+        ? Number(producto.duracion)
+        : null,
     },
   );
 }
@@ -200,6 +211,8 @@ export async function crearDisco(datos) {
         artista: datos.artista,
         duracion: datos.duracion ? Number(datos.duracion) : null,
         year: datos.year ? Number(datos.year) : null,
+        audio: datos.audio?.trim() || null,
+        start: datos.audio?.trim() ? Number(datos.start) : null,
       },
     },
   );

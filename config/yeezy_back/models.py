@@ -29,8 +29,10 @@ class Producto(models.Model):
 class Disco(models.Model):
     producto_id = models.OneToOneField(Producto, primary_key=True, on_delete=models.CASCADE)
     artista = models.TextField()
-    duracion = models.BigIntegerField()
+    duracion = models.BigIntegerField(null=True)
     year = models.BigIntegerField(null=True)
+    audio = models.TextField(null=True, blank=True)
+    start = models.BigIntegerField(null=True)
     class Meta: db_table = "discos"; managed = False
 
 class Ropa(models.Model):

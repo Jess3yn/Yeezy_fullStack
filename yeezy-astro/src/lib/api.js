@@ -85,6 +85,9 @@ export async function getDiscos() {
         imagen
         stock
         precio
+        audio
+        start
+        duracion
       }
     }
   `);
@@ -99,6 +102,9 @@ export async function getDiscos() {
     imagen: productImage(disco.imagen) || defaultDiscImage,
     precio: numericPrice(disco.precio),
     stock: Number(disco.stock),
+    audio: disco.audio || '',
+    start: Number(disco.start ?? 0),
+    duracion: disco.duracion == null ? null : Number(disco.duracion),
   }));
 }
 
@@ -150,7 +156,13 @@ export function normalizarProductoNuevo(producto) {
   };
 
   if (producto.tipo === 'disco') {
-    return { ...base, imagen: productImage(producto.imagen) || defaultDiscImage };
+    return {
+      ...base,
+      imagen: productImage(producto.imagen) || defaultDiscImage,
+      audio: producto.audio || '',
+      start: Number(producto.start ?? 0),
+      duracion: producto.duracion == null ? null : Number(producto.duracion),
+    };
   }
 
   const seccion = categorySlug(producto.categoria);

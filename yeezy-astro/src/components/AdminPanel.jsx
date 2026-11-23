@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '../lib/auth.js';
+import YouTubeClipPlayer from './YouTubeClipPlayer.jsx';
 import {
   getPanel,
   actualizarProducto,
@@ -38,6 +39,8 @@ const productoVacio = {
   artista: '',
   duracion: '',
   year: '',
+  audio: '',
+  start: 0,
 };
 
 function SelectorImagen({ value, images, disabled, onChange, onUpload }) {
@@ -349,7 +352,7 @@ export default function AdminPanel() {
           <div className="admin-tabla-wrap">
             <table className="admin-tabla">
               <thead>
-                <tr><th>ID</th><th>TIPO</th><th>NOMBRE</th><th>IMAGEN</th><th>CATEGORIA</th><th>PRECIO</th><th>STOCK</th><th></th></tr>
+                <tr><th>ID</th><th>TIPO</th><th>NOMBRE</th><th>IMAGEN</th><th>YOUTUBE</th><th>INICIO (S)</th><th>CLIP (S)</th><th>PRUEBA</th><th>CATEGORIA</th><th>PRECIO</th><th>STOCK</th><th></th></tr>
               </thead>
               <tbody>
                 {productos.map((p) => (
@@ -369,6 +372,49 @@ export default function AdminPanel() {
                         )}
                       />
                     </td>
+                    {p.tipo === 'disco' ? (
+                      <>
+                        <td>
+                          <input
+                            aria-label={`Enlace de YouTube de ${p.nombre}`}
+                            autoComplete="url"
+                            placeholder="https://youtube.com/..."
+                            type="url"
+                            value={p.audio ?? ''}
+                            onChange={(e) => cambiar(p.id, 'audio', e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            aria-label={`Inicio del clip de ${p.nombre}, en segundos`}
+                            min="0"
+                            step="1"
+                            type="number"
+                            value={p.start ?? 0}
+                            onChange={(e) => cambiar(p.id, 'start', e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            aria-label={`Duración del clip de ${p.nombre}, en segundos`}
+                            min="1"
+                            step="1"
+                            type="number"
+                            value={p.duracion ?? ''}
+                            onChange={(e) => cambiar(p.id, 'duracion', e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <YouTubeClipPlayer
+                            audioUrl={p.audio}
+                            duration={p.duracion}
+                            label={`audio de ${p.nombre}`}
+                            showWhenUnavailable
+                            start={p.start}
+                          />
+                        </td>
+                      </>
+                    ) : <td colSpan="4">-</td>}
                     <td>
                       <select
                         aria-label={`Categoría de ${p.nombre}`}
@@ -435,8 +481,35 @@ export default function AdminPanel() {
             ) : (
               <>
                 <input placeholder="ARTISTA" required {...campo('artista')} />
-                <input type="number" min="0" placeholder="DURACION (min)" {...campo('duracion')} />
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="DURACIÓN DEL CLIP (segundos)"
+                  required={Boolean(nuevo.audio?.trim())}
+                  {...campo('duracion')}
+                />
                 <input type="number" min="0" placeholder="AÑO" {...campo('year')} />
+                <input
+                  autoComplete="url"
+                  placeholder="LINK DE YOUTUBE"
+                  type="url"
+                  {...campo('audio')}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="INICIO DEL CLIP (segundos)"
+                  {...campo('start')}
+                />
+                <YouTubeClipPlayer
+                  audioUrl={nuevo.audio}
+                  duration={nuevo.duracion}
+                  label="audio del nuevo disco"
+                  showWhenUnavailable
+                  start={nuevo.start}
+                />
               </>
             )}
             <button type="submit" disabled={subiendoImagen}>
