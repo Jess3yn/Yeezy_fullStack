@@ -1,46 +1,58 @@
-# Astro Starter Kit: Minimal
+# YZY - e-commerce como PWA
 
-```sh
-npm create astro@latest -- --template minimal
+Proyecto de Programación Web 2. Tienda en línea que recrea la página de Yeezy, con frontend en Astro y React, backend en Django con GraphQL y base de datos en Supabase.
+
+Práctica P10 (Unidad 3.2): la tienda ahora es una PWA instalable.
+
+## Carpetas
+
+- `yeezy-astro`: frontend (Astro + React).
+- `config`: backend (Django + Strawberry GraphQL).
+
+## Cómo correrlo
+
+Frontend:
+
+```
+cd yeezy-astro
+npm install
+npm run dev
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+Se abre en http://localhost:4321. Para probar la instalación hay que compilar, porque el service worker solo se genera en el build:
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```
+npm run build
+npm run preview
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+Backend (necesita su archivo `config/.env` con los datos de la base de datos y de Mercado Pago):
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+```
+cd config
+pip install -r requirements.txt
+python -m uvicorn config.asgi:application --port 8000
+```
 
-Any static assets, like images, can be placed in the `public/` directory.
+## Lo que se hizo para la PWA
 
-## 🧞 Commands
+1. Se instaló `@vite-pwa/astro` dentro de `yeezy-astro` y se agregó en `astro.config.mjs`.
+2. El manifiesto se define en la misma configuración (name, short_name, start_url, scope, display standalone, theme_color, background_color, lang e icons).
+3. Los colores salen de los tokens de la tienda: `#111111` (texto y botones) como theme_color y `#ffffff` (fondo) como background_color.
+4. Iconos en `public/icons`: `icon-192.png`, `icon-512.png` e `icon-maskable-512.png` (logo dentro del 80% central).
+5. `Layout.astro` tiene el `theme-color`, el link al manifiesto, el `apple-touch-icon` y el registro del service worker con `registerSW`.
+6. Bono: `Nav.jsx` guarda el evento `beforeinstallprompt` y muestra un botón INSTALAR que abre el cuadro de instalación. Se oculta cuando la app ya se instaló.
 
-All commands are run from the root of the project, from a terminal:
+El modo sin conexión queda para la práctica P3-3. Aquí solo se busca que sea instalable.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+## Cómo comprobar que es instalable
 
-## 👀 Want to learn more?
+1. `npm run build` y `npm run preview`, abrir la dirección que muestra la terminal en Chrome.
+2. F12, pestaña Application, sección Manifest: deben verse los datos, los tres iconos y en Installability no debe haber errores.
+3. En Application > Service Workers debe aparecer `sw.js` activado.
+4. En la barra de direcciones aparece el icono de instalar, o el botón INSTALAR de la tienda.
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+En Lighthouse ya no existe la categoría PWA, por eso la instalabilidad se revisa en Application > Manifest.
 
 ## Supabase Storage images
 
